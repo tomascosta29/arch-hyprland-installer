@@ -1,0 +1,10 @@
+# Logs and temporaries
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

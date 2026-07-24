@@ -1,0 +1,95 @@
+/* ==============================================================================
+   Waybar Catppuccin Macchiato Stylesheet
+   ============================================================================== */
+
+* {
+    border: none;
+    border-radius: 0;
+    font-family: "JetBrainsMono Nerd Font", "DejaVuSansM Nerd Font", Monospace;
+    font-size: 13px;
+    min-height: 0;
+}
+
+window#waybar {
+    background-color: rgba(30, 30, 46, 0.85);
+    color: #cdd6f4;
+    transition-property: background-color;
+    transition-duration: .5s;
+}
+
+#workspaces button {
+    padding: 0 8px;
+    background-color: transparent;
+    color: #a6adc8;
+}
+
+#workspaces button:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+}
+
+#workspaces button.active {
+    background-color: #89b4fa;
+    color: #1e1e2e;
+    border-radius: 6px;
+}
+
+#workspaces button.urgent {
+    background-color: #f38ba8;
+    color: #1e1e2e;
+    border-radius: 6px;
+}
+
+#clock,
+#battery,
+#cpu,
+#memory,
+#disk,
+#temperature,
+#backlight,
+#network,
+#pulseaudio,
+#wireplumber,
+#custom-media,
+#tray,
+#mode,
+#idle_inhibitor,
+#scratchpad,
+#mpd {
+    padding: 0 10px;
+    color: #cdd6f4;
+    background-color: #313244;
+    margin: 4px 2px;
+    border-radius: 6px;
+}
+
+#window {
+    font-weight: bold;
+    color: #89b4fa;
+}
+
+#pulseaudio {
+    background-color: #a6e3a1;
+    color: #11111b;
+}
+
+#network {
+    background-color: #89b4fa;
+    color: #11111b;
+}
+
+#cpu {
+    background-color: #f9e2af;
+    color: #11111b;
+}
+
+#memory {
+    background-color: #cba6f7;
+    color: #11111b;
+}
+
+#clock {
+    background-color: #89dceb;
+    color: #11111b;
+    font-weight: bold;
+}
