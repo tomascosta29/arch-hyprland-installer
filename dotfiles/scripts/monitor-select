@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Monitor Configuration Switcher for Hyprland
+# ==============================================================================
+
+set -euo pipefail
+
+CONFIG_DIR="${HOME}/.config/hypr"
+MONITORS_DIR="${CONFIG_DIR}/monitors"
+
+if [[ $# -eq 0 ]]; then
+    CHOICE=$(echo -e "󰍹 Single / VM Auto-Detect\n󰍹 Dual 1440p Bare-Metal (DP-1 + HDMI-A-1)" | rofi -dmenu -i -p "󰍹 Select Monitor Layout")
+    if [[ -z "${CHOICE}" ]]; then
+        exit 0
+    fi
+    if [[ "${CHOICE}" == *"Dual"* ]]; then
+        MODE="dual"
+    else
+        MODE="single"
+    fi
+else
+    MODE="$1"
+fi
+
+if [[ "${MODE}" == "dual" || "${MODE}" == "dual-host" ]]; then
+    cat <<EOF > "${CONFIG_DIR}/monitors.conf"
+# Active Monitor Profile: Dual 1440p Bare-Metal
+source = ~/.config/hypr/monitors/monitors-dual-host.conf
+EOF
+    MSG="Switched to Dual 1440p Layout (DP-1 + HDMI-A-1)"
+else
+    cat <<EOF > "${CONFIG_DIR}/monitors.conf"
+# Active Monitor Profile: Single / VM Auto-Detect
+source = ~/.config/hypr/monitors/monitors-single.conf
+EOF
+    MSG="Switched to Single / VM Auto-Detect Layout"
+fi
+
+if command -v hyprctl &>/dev/null && pgrep -x Hyprland &>/dev/null; then
+    hyprctl reload 2>/dev/null || true
+fi
+
+if command -v notify-send &>/dev/null; then
+    notify-send -i display "Monitor Engine" "${MSG}"
+fi
+
+echo "${MSG}"
