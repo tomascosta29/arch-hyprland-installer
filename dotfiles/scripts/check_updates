@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# Arch Linux Pacman Update Checker for Waybar
-# ==============================================================================
+# Return a Waybar JSON payload for pending Arch package updates.
 
-set -euo pipefail
+set -Eeuo pipefail
 
-if command -v checkupdates &>/dev/null; then
-    UPDATES=$(checkupdates 2>/dev/null | wc -l || echo 0)
-else
-    UPDATES=0
+updates=()
+if command -v checkupdates >/dev/null 2>&1; then
+    mapfile -t updates < <(checkupdates 2>/dev/null || true)
 fi
 
-if [[ "${UPDATES}" -gt 0 ]]; then
-    echo "{\"text\":\"󰏔 ${UPDATES}\",\"tooltip\":\"${UPDATES} updates available\",\"class\":\"pending\"}"
+count=${#updates[@]}
+if ((count > 0)); then
+    printf '{"text":"󰏔 %d","tooltip":"%d update%s available","class":"pending"}\n' \
+        "${count}" "${count}" "$([[ ${count} -eq 1 ]] || printf s)"
 else
-    echo "{\"text\":\"󰏔 0\",\"tooltip\":\"System up to date\",\"class\":\"updated\"}"
+    printf '{"text":"󰏔 0","tooltip":"System up to date","class":"updated"}\n'
 fi

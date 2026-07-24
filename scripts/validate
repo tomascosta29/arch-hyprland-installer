@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Run all repository checks that are available on the current machine.
+
+set -Eeuo pipefail
+
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPOSITORY_ROOT}"
+
+bash_files=(
+    install.sh
+    scripts/deploy-user
+    dotfiles/scripts/*
+    dotfiles/costa-utils/uninstall.sh
+)
+bash -n "${bash_files[@]}"
+
+command -v ruff >/dev/null 2>&1 || {
+    printf 'Error: ruff is required for Python validation.\n' >&2
+    exit 1
+}
+ruff format --check dotfiles/costa-utils tests
+ruff check dotfiles/costa-utils tests
+
+PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -v
+
+if command -v luac >/dev/null 2>&1; then
+    while IFS= read -r -d '' lua_file; do
+        luac -p "${lua_file}"
+    done < <(find dotfiles/hypr dotfiles/themes -type f -name '*.lua' -print0)
+else
+    printf 'Warning: luac is unavailable; skipping Lua syntax validation.\n' >&2
+fi
+
+desktop_file="dotfiles/costa-utils/applications/org.fcosta.CostaUtils.desktop"
+if command -v desktop-file-validate >/dev/null 2>&1; then
+    desktop-file-validate "${desktop_file}"
+else
+    printf 'Warning: desktop-file-validate is unavailable; skipping desktop validation.\n' >&2
+fi
+
+if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck --severity=error "${bash_files[@]}"
+else
+    printf 'Warning: shellcheck is unavailable; skipping semantic Bash lint.\n' >&2
+fi
+
+git diff --check
+printf 'All available validation checks passed.\n'

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Deploy the repository's user configuration into the current account.
+
+set -Eeuo pipefail
+
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
+readonly DATA_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}"
+readonly BIN_DIR="${HOME}/.local/bin"
+readonly THEME="${1:-fcosta}"
+readonly CONFIG_COMPONENTS=(dunst hypr kitty rofi scripts themes waybar)
+
+die() {
+    printf 'Error: %s\n' "$1" >&2
+    exit 1
+}
+
+((EUID != 0)) || die "Run this command as the target desktop user, not root."
+[[ "${THEME}" =~ ^[A-Za-z0-9._-]+$ ]] ||
+    die "Theme name contains unsupported characters."
+[[ -d "${REPOSITORY_ROOT}/dotfiles/themes/${THEME}" ]] ||
+    die "Theme '${THEME}' does not exist."
+
+for component in "${CONFIG_COMPONENTS[@]}"; do
+    source_dir="${REPOSITORY_ROOT}/dotfiles/${component}"
+    [[ -d "${source_dir}" ]] || die "Missing dotfile component '${component}'."
+    mkdir -p "${CONFIG_DIR}/${component}"
+    cp -a "${source_dir}/." "${CONFIG_DIR}/${component}/"
+done
+
+mkdir -p \
+    "${BIN_DIR}" \
+    "${DATA_DIR}/applications" \
+    "${DATA_DIR}/icons/hicolor/scalable/apps" \
+    "${DATA_DIR}/costa-utils"
+cp -a "${REPOSITORY_ROOT}/dotfiles/costa-utils/." \
+    "${DATA_DIR}/costa-utils/"
+ln -sfn "../share/costa-utils/costa_utils.py" "${BIN_DIR}/costa-utils"
+cp -a \
+    "${REPOSITORY_ROOT}/dotfiles/costa-utils/applications/org.fcosta.CostaUtils.desktop" \
+    "${DATA_DIR}/applications/"
+cp -a "${REPOSITORY_ROOT}/dotfiles/costa-utils/icons/costa_utils.svg" \
+    "${DATA_DIR}/icons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg"
+
+find "${CONFIG_DIR}/scripts" -type f -exec chmod 0755 {} +
+chmod 0755 \
+    "${DATA_DIR}/costa-utils/costa_utils.py" \
+    "${DATA_DIR}/costa-utils/uninstall.sh"
+
+"${CONFIG_DIR}/scripts/theme-select" "${THEME}"
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "${DATA_DIR}/applications"
+fi
+
+# Existing windows keep old Python modules in memory, so restart the suite.
+pkill -f "${DATA_DIR}/costa-utils/costa_utils.py" >/dev/null 2>&1 || true
+
+printf "User configuration deployed with theme '%s'.\n" "${THEME}"

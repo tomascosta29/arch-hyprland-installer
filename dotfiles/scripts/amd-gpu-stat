@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Read AMD GPU utilization or dedicated VRAM without assuming a DRM card number.
+
+set -Eeuo pipefail
+
+find_amd_device() {
+    local device driver
+
+    for device in /sys/class/drm/card*/device; do
+        [[ -d "${device}" ]] || continue
+        driver="$(readlink -f "${device}/driver" 2>/dev/null || true)"
+        if [[ "${driver##*/}" == "amdgpu" ]]; then
+            printf '%s\n' "${device}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+if (($# != 1)); then
+    printf 'Usage: amd-gpu-stat usage|vram\n' >&2
+    exit 2
+fi
+
+device="$(find_amd_device || true)"
+if [[ -z "${device}" ]]; then
+    printf '0\n'
+    exit 0
+fi
+
+case "$1" in
+    usage)
+        if [[ -r "${device}/gpu_busy_percent" ]]; then
+            read -r value < "${device}/gpu_busy_percent"
+            printf '%d\n' "${value:-0}"
+        else
+            printf '0\n'
+        fi
+        ;;
+    vram)
+        if [[ -r "${device}/mem_info_vram_used" ]]; then
+            read -r value < "${device}/mem_info_vram_used"
+            awk -v bytes="${value:-0}" 'BEGIN { printf "%.1f\n", bytes / 1073741824 }'
+        else
+            printf '0.0\n'
+        fi
+        ;;
+    *)
+        printf "Unknown metric '%s'; use 'usage' or 'vram'.\n" "$1" >&2
+        exit 2
+        ;;
+esac

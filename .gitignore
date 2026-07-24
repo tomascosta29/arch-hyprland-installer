@@ -8,3 +8,10 @@
 # OS files
 .DS_Store
 Thumbs.db
+
+# Agent Local Notes (Uncommitted)
+AGENTS.md
+
+# Python generated files
+__pycache__/
+*.py[cod]

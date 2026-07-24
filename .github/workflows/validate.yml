@@ -1,0 +1,24 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repository:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install validation dependencies
+        run: >-
+          pacman -Syu --noconfirm --needed
+          git python python-gobject gtk4 libadwaita
+          ruff lua desktop-file-utils shellcheck
+
+      - uses: actions/checkout@v4
+
+      - name: Validate repository
+        run: ./scripts/validate

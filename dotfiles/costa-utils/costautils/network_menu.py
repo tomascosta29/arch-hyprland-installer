@@ -1,12 +1,37 @@
 #!/usr/bin/env python3
-import os
 import subprocess
 import threading
+
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk, Gdk, Gio
+from gi.repository import Adw, Gdk, GLib, Gtk
+
+
+def parse_nmcli_terse(line):
+    """Split an nmcli terse record while honoring its backslash escaping."""
+    fields = []
+    current = []
+    escaped = False
+
+    for char in line:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == ":":
+            fields.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+
+    if escaped:
+        current.append("\\")
+    fields.append("".join(current))
+    return fields
+
 
 class NetworkWindow(Adw.ApplicationWindow):
     def __init__(self, app):
@@ -14,18 +39,18 @@ class NetworkWindow(Adw.ApplicationWindow):
         self.set_default_size(480, 450)
         self.set_resizable(False)
         self.set_modal(True)
-        
+
         self.networks = []
         self.connecting = False
         self.wifi_enabled = True
-        
+
         self.build_ui()
         self.load_css()
-        
+
         # Initial reload
         self.refresh_networks()
         self.setup_keyboard()
-        
+
         self.connect("close-request", self.on_close_request)
         self.connect("notify::is-active", self.on_is_active_changed)
 
@@ -70,22 +95,24 @@ class NetworkWindow(Adw.ApplicationWindow):
 
         # Main box
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        main_box.set_margin_start(16); main_box.set_margin_end(16)
-        main_box.set_margin_top(16); main_box.set_margin_bottom(16)
+        main_box.set_margin_start(16)
+        main_box.set_margin_end(16)
+        main_box.set_margin_top(16)
+        main_box.set_margin_bottom(16)
         view.set_content(main_box)
 
         # Wi-Fi Power Switch
         power_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         power_box.add_css_class("card-box")
-        
+
         power_icon = Gtk.Image.new_from_icon_name("network-wireless-symbolic")
         power_label = Gtk.Label(label="Wi-Fi Enable")
         power_label.set_hexpand(True)
         power_label.set_halign(Gtk.Align.START)
-        
+
         self.wifi_switch = Gtk.Switch()
         self.wifi_switch.connect("state-set", self.on_wifi_switch_toggled)
-        
+
         power_box.append(power_icon)
         power_box.append(power_label)
         power_box.append(self.wifi_switch)
@@ -139,14 +166,14 @@ class NetworkWindow(Adw.ApplicationWindow):
 
         actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         actions_box.set_halign(Gtk.Align.CENTER)
-        
+
         cancel_btn = Gtk.Button(label="Cancel")
         cancel_btn.connect("clicked", lambda _: self.cancel_password_prompt())
-        
+
         connect_btn = Gtk.Button(label="Connect")
         connect_btn.add_css_class("suggested-action")
         connect_btn.connect("clicked", lambda _: self.on_connect_with_password_clicked())
-        
+
         actions_box.append(cancel_btn)
         actions_box.append(connect_btn)
         self.password_box.append(actions_box)
@@ -160,16 +187,22 @@ class NetworkWindow(Adw.ApplicationWindow):
 
     def is_wifi_powered(self):
         try:
-            res = subprocess.run(["nmcli", "radio", "wifi"], capture_output=True, text=True)
+            res = subprocess.run(
+                ["nmcli", "radio", "wifi"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
             return res.stdout.strip() == "enabled"
-        except:
-            return True
+        except (OSError, subprocess.SubprocessError):
+            return False
 
     def on_wifi_switch_toggled(self, switch, state):
         def worker():
             action = "on" if state else "off"
             subprocess.run(["nmcli", "radio", "wifi", action])
             GLib.idle_add(self.refresh_networks)
+
         threading.Thread(target=worker, daemon=True).start()
         return True
 
@@ -182,39 +215,58 @@ class NetworkWindow(Adw.ApplicationWindow):
             return
 
         self.refresh_btn.set_sensitive(False)
-        
+
         def worker():
             # Trigger rescan
-            subprocess.run(["nmcli", "device", "wifi", "rescan"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            proc = subprocess.run(
-                ["nmcli", "-t", "-f", "SSID,SIGNAL,ACTIVE,BARS", "device", "wifi", "list"],
-                capture_output=True, text=True
+            subprocess.run(
+                ["nmcli", "device", "wifi", "rescan"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
-            
+
+            proc = subprocess.run(
+                [
+                    "nmcli",
+                    "--terse",
+                    "--escape",
+                    "yes",
+                    "--fields",
+                    "SSID,SIGNAL,ACTIVE,BARS",
+                    "device",
+                    "wifi",
+                    "list",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
             networks = {}
             if proc.returncode == 0:
                 for line in proc.stdout.splitlines():
-                    parts = line.split(":")
-                    if len(parts) >= 3:
+                    parts = parse_nmcli_terse(line)
+                    if len(parts) >= 4:
                         ssid = parts[0]
-                        if not ssid: continue
-                        try: signal = int(parts[1])
-                        except: signal = 0
+                        if not ssid:
+                            continue
+                        try:
+                            signal = int(parts[1])
+                        except ValueError:
+                            signal = 0
                         active = parts[2] == "yes"
                         bars = parts[3] if len(parts) > 3 else ""
-                        
+
                         if ssid not in networks or signal > networks[ssid]["signal"]:
                             networks[ssid] = {
                                 "ssid": ssid,
                                 "signal": signal,
                                 "active": active,
-                                "bars": bars
+                                "bars": bars,
                             }
-            
+
             network_list = list(networks.values())
             network_list.sort(key=lambda x: (not x["active"], -x["signal"]))
-            
+
             GLib.idle_add(self.update_list_ui, network_list)
 
         threading.Thread(target=worker, daemon=True).start()
@@ -222,10 +274,10 @@ class NetworkWindow(Adw.ApplicationWindow):
     def update_list_ui(self, network_list):
         self.networks = network_list
         self.listbox.remove_all()
-        
+
         for net in self.networks:
             self.listbox.append(self.make_network_row(net))
-            
+
         self.refresh_btn.set_sensitive(True)
         self.stack.set_visible_child_name("list")
 
@@ -233,24 +285,28 @@ class NetworkWindow(Adw.ApplicationWindow):
         row = Gtk.ListBoxRow()
         row.ssid = net["ssid"]
         row.active = net["active"]
-        
+
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         box.add_css_class("network-row")
-        
+
         # Signal Icon
         icon_name = "network-wireless-signal-none-symbolic"
         sig = net["signal"]
-        if sig >= 80: icon_name = "network-wireless-signal-excellent-symbolic"
-        elif sig >= 60: icon_name = "network-wireless-signal-good-symbolic"
-        elif sig >= 40: icon_name = "network-wireless-signal-ok-symbolic"
-        elif sig >= 20: icon_name = "network-wireless-signal-weak-symbolic"
-        
+        if sig >= 80:
+            icon_name = "network-wireless-signal-excellent-symbolic"
+        elif sig >= 60:
+            icon_name = "network-wireless-signal-good-symbolic"
+        elif sig >= 40:
+            icon_name = "network-wireless-signal-ok-symbolic"
+        elif sig >= 20:
+            icon_name = "network-wireless-signal-weak-symbolic"
+
         icon = Gtk.Image.new_from_icon_name(icon_name)
         if net["active"]:
             icon.add_css_class("accent-icon")
-            
+
         box.append(icon)
-        
+
         # SSID Label
         label = Gtk.Label(label=net["ssid"])
         label.set_hexpand(True)
@@ -258,38 +314,63 @@ class NetworkWindow(Adw.ApplicationWindow):
         if net["active"]:
             label.add_css_class("bold-label")
         box.append(label)
-        
+
         # Connected Checkmark
         if net["active"]:
             check = Gtk.Image.new_from_icon_name("object-select-symbolic")
             check.add_css_class("accent-icon")
             box.append(check)
-            
+
         row.set_child(box)
         return row
 
     def on_network_row_activated(self, listbox, row):
-        if self.connecting or row.active: return
-        
+        if self.connecting or row.active:
+            return
+
         ssid = row.ssid
         self.selected_ssid = ssid
-        
+
         # Check if connection already exists
         def check_conn_and_connect():
-            proc = subprocess.run(["nmcli", "-t", "-f", "NAME", "connection", "show"], capture_output=True, text=True)
-            saved_connections = [line.strip() for line in proc.stdout.splitlines()]
-            
+            proc = subprocess.run(
+                [
+                    "nmcli",
+                    "--terse",
+                    "--escape",
+                    "yes",
+                    "--fields",
+                    "NAME,802-11-wireless.ssid",
+                    "connection",
+                    "show",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            saved_connections = {}
+            for line in proc.stdout.splitlines():
+                fields = parse_nmcli_terse(line)
+                if len(fields) >= 2 and fields[1]:
+                    saved_connections[fields[1]] = fields[0]
+
             if ssid in saved_connections:
                 # Connection profile exists, connect directly
-                GLib.idle_add(self.start_connection, ssid)
+                GLib.idle_add(
+                    self.start_connection,
+                    ssid,
+                    None,
+                    saved_connections[ssid],
+                )
             else:
                 # Connection profile doesn't exist, prompt for password
                 GLib.idle_add(self.prompt_for_password, ssid)
-                
+
         threading.Thread(target=check_conn_and_connect, daemon=True).start()
 
     def prompt_for_password(self, ssid):
-        self.password_title.set_markup(f"Connect to <b>{ssid}</b>")
+        escaped_ssid = GLib.markup_escape_text(ssid)
+        self.password_title.set_markup(f"Connect to <b>{escaped_ssid}</b>")
         self.password_entry.set_text("")
         self.stack.set_visible_child_name("password")
         self.password_entry.grab_focus()
@@ -299,27 +380,40 @@ class NetworkWindow(Adw.ApplicationWindow):
         self.selected_ssid = None
 
     def on_connect_with_password_clicked(self):
-        password = self.password_entry.get_text().strip()
+        password = self.password_entry.get_text()
         ssid = self.selected_ssid
-        if not ssid: return
+        if not ssid:
+            return
         self.start_connection(ssid, password)
 
-    def start_connection(self, ssid, password=None):
+    def start_connection(self, ssid, password=None, profile_name=None):
         self.connecting = True
         self.loading_status.set_description(f"Connecting to {ssid}...")
         self.stack.set_visible_child_name("loading")
-        
+
         def connect_worker():
-            if password is not None:
-                cmd = ["nmcli", "device", "wifi", "connect", ssid, "password", password]
+            input_text = None
+            if profile_name is not None:
+                cmd = ["nmcli", "connection", "up", "id", profile_name]
+            elif password is not None:
+                cmd = ["nmcli", "--ask", "device", "wifi", "connect", ssid]
+                input_text = f"{password}\n"
             else:
-                cmd = ["nmcli", "connection", "up", "id", ssid]
-                
-            res = subprocess.run(cmd, capture_output=True, text=True)
+                cmd = ["nmcli", "device", "wifi", "connect", ssid]
+
+            res = subprocess.run(
+                cmd,
+                input=input_text,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
             success = res.returncode == 0
-            
-            GLib.idle_add(self.on_connection_complete, success, ssid, res.stderr.strip() or res.stdout.strip())
-            
+
+            GLib.idle_add(
+                self.on_connection_complete, success, ssid, res.stderr.strip() or res.stdout.strip()
+            )
+
         threading.Thread(target=connect_worker, daemon=True).start()
 
     def on_connection_complete(self, success, ssid, output):
@@ -376,4 +470,6 @@ class NetworkWindow(Adw.ApplicationWindow):
         """
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
-        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )

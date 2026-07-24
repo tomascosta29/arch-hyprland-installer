@@ -23,26 +23,7 @@
             "16": "8"
         },
         "persistent-workspaces": {
-            "DP-1": [
-                1,
-                2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
-            ],
-            "HDMI-A-1": [
-                9,
-                10,
-                11,
-                12,
-                13,
-                14,
-                15,
-                16
-            ]
+            "*": 10
         },
         "window-rewrite-separator": " ",
         "window-rewrite-default": "",
@@ -50,9 +31,6 @@
             "class<firefox>": "󰈹",
             "class<org.mozilla.firefox>": "󰈹",
             "class<kitty>": "",
-            "class<alacritty>": "",
-            "class<Alacritty>": "",
-            "class<foot>": "",
             "class<google-chrome>": "",
             "class<google-chrome-stable>": "",
             "class<chromium>": "",
@@ -66,10 +44,7 @@
             "class<Signal>": "󰈔",
             "class<spotify>": "",
             "class<Spotify>": "",
-            "class<thunar>": "󰉋",
-            "class<Thunar>": "󰉋",
-            "class<pcmanfm>": "󰉋",
-            "class<nemo>": "󰉋",
+            "class<org.gnome.Nautilus>": "󰉋",
             "class<obsidian>": "󰎚",
             "class<obs>": "󰐌",
             "class<vlc>": "󰕼",
@@ -108,7 +83,7 @@
     "custom/system": {
         "format": " 󱓞 ",
         "tooltip": false,
-        "on-click": "flatpak run net.nokyan.Resources"
+        "on-click": "kitty --class system-monitor -e htop"
     },
     // CPU
     "cpu": {
@@ -118,23 +93,23 @@
             "warn": 70,
             "crit": 90
         },
-        "on-click": "alacritty --class alacritty-float --config-file ~/.config/hypr/alacritty/alacritty.toml -o 'font.size=12' -e htop"
+        "on-click": "kitty --class system-monitor -e htop"
     },
     // GPU
     "custom/gpu": {
-        "exec": "cat /sys/class/drm/card1/device/gpu_busy_percent 2>/dev/null || cat /sys/class/drm/card0/device/gpu_busy_percent 2>/dev/null || echo 0",
+        "exec": "~/.config/scripts/amd-gpu-stat usage",
         "interval": 5,
         "format": "󰢮 {}%",
         "tooltip": false,
-        "on-click": "alacritty --class alacritty-float --config-file ~/.config/hypr/alacritty/alacritty.toml -o 'font.size=12' -e htop"
+        "on-click": "kitty --class system-monitor -e htop"
     },
     // VRAM
     "custom/vram": {
-        "exec": "awk '{printf \"%.1f\", $1/1024/1024/1024}' /sys/class/drm/card1/device/mem_info_vram_used",
+        "exec": "~/.config/scripts/amd-gpu-stat vram",
         "interval": 10,
         "format": "󰘚 {}G",
         "tooltip": false,
-        "on-click": "alacritty --class alacritty-float --config-file ~/.config/hypr/alacritty/alacritty.toml -o 'font.size=12' -e htop"
+        "on-click": "kitty --class system-monitor -e htop"
     },
     // Separator
     "custom/sep": {
@@ -149,7 +124,7 @@
             "warn": 75,
             "crit": 90
         },
-        "on-click": "alacritty --class alacritty-float --config-file ~/.config/hypr/alacritty/alacritty.toml -o 'font.size=12' -e htop"
+        "on-click": "kitty --class system-monitor -e htop"
     },
     // Disk
     "disk": {
@@ -160,14 +135,13 @@
             "warn": 80,
             "crit": 90
         },
-        "on-click": "~/.config/hypr/scripts/rofi_disk"
+        "on-click": "nautilus /"
     },
     // Temperature
     "temperature": {
-        "hwmon-path": "/sys/class/hwmon/hwmon5/temp1_input",
         "format": "󰔏 {temperatureC}°C",
         "critical-threshold": 85,
-        "on-click": "~/.config/hypr/scripts/rofi_sensors"
+        "on-click": "kitty --class system-monitor -e watch -n 2 sensors"
     },
     // Network
     "network": {
@@ -221,13 +195,13 @@
         "on-scroll-down": "playerctl position 10-",
         "interval": 3
     },
-    // Updates (Fedora/dnf)
+    // Updates (Arch/pacman)
     "custom/updates": {
         "exec": "~/.config/scripts/check_updates",
         "interval": 1800,
         "format": "󰚰 {}",
         "return-type": "json",
-        "on-click": "~/.config/hypr/scripts/alacritty -f -e bash -lc 'sudo dnf upgrade'"
+        "on-click": "kitty --class system-updates -e sudo pacman -Syu"
     },
     // Idle Inhibitor
     "idle_inhibitor": {
@@ -248,7 +222,7 @@
     // Custom Menu
     "custom/menu": {
         "format": "󰣇",
-        "on-click": "costa-utils --app-menu",
+        "on-click": "~/.local/bin/costa-utils --app-menu",
         "tooltip": false
     },
     // Custom Power

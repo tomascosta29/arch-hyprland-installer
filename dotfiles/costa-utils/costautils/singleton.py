@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-import gi
 
-from gi.repository import GLib, Gio
-
+from gi.repository import Gio, GLib
 
 BUS_NAME = "org.fcosta.CostaUtils"
 OBJECT_PATH = "/org/fcosta/CostaUtils"
 APP_INTERFACE = "org.freedesktop.Application"
 ACTION_NAME = "activate-target"
-CALL_TIMEOUT_MS = 500
+CALL_TIMEOUT_MS = 3000
 
 
 def _get_session_bus():

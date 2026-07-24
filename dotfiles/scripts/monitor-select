@@ -1,47 +1,85 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# Monitor Configuration Switcher for Hyprland
-# ==============================================================================
+# Switch monitor profiles in both current Lua and legacy Hyprland formats.
 
-set -euo pipefail
+set -Eeuo pipefail
 
-CONFIG_DIR="${HOME}/.config/hypr"
-MONITORS_DIR="${CONFIG_DIR}/monitors"
+readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/hypr"
+readonly MONITORS_DIR="${CONFIG_DIR}/monitors"
 
-if [[ $# -eq 0 ]]; then
-    CHOICE=$(echo -e "󰍹 Single / VM Auto-Detect\n󰍹 Dual 1440p Bare-Metal (DP-1 + HDMI-A-1)" | rofi -dmenu -i -p "󰍹 Select Monitor Layout")
-    if [[ -z "${CHOICE}" ]]; then
-        exit 0
-    fi
-    if [[ "${CHOICE}" == *"Dual"* ]]; then
-        MODE="dual"
+die() {
+    printf 'Error: %s\n' "$1" >&2
+    exit 1
+}
+
+atomic_write() {
+    local destination=$1 content=$2 temp_file
+
+    mkdir -p "$(dirname "${destination}")"
+    temp_file="$(mktemp "$(dirname "${destination}")/.$(basename "${destination}").XXXXXX")"
+    printf '%s\n' "${content}" > "${temp_file}"
+    chmod 0644 "${temp_file}"
+    mv -f "${temp_file}" "${destination}"
+}
+
+choose_mode() {
+    local selection
+
+    command -v rofi >/dev/null 2>&1 ||
+        die "Rofi is required for interactive monitor selection."
+    selection="$(
+        printf '%s\n' \
+            "󰍹 Single / VM Auto-Detect" \
+            "󰍹 Dual 1440p Bare-Metal (DP-1 + HDMI-A-1)" |
+            rofi -dmenu -i -p "󰍹 Select Monitor Layout"
+    )"
+    [[ -n "${selection}" ]] || exit 0
+
+    if [[ "${selection}" == *Dual* ]]; then
+        printf 'dual\n'
     else
-        MODE="single"
+        printf 'single\n'
     fi
-else
-    MODE="$1"
+}
+
+if (($# > 1)); then
+    die "Usage: monitor-select [single|dual]"
 fi
 
-if [[ "${MODE}" == "dual" || "${MODE}" == "dual-host" ]]; then
-    cat <<EOF > "${CONFIG_DIR}/monitors.conf"
-# Active Monitor Profile: Dual 1440p Bare-Metal
-source = ~/.config/hypr/monitors/monitors-dual-host.conf
-EOF
-    MSG="Switched to Dual 1440p Layout (DP-1 + HDMI-A-1)"
-else
-    cat <<EOF > "${CONFIG_DIR}/monitors.conf"
-# Active Monitor Profile: Single / VM Auto-Detect
-source = ~/.config/hypr/monitors/monitors-single.conf
-EOF
-    MSG="Switched to Single / VM Auto-Detect Layout"
+MODE="${1:-}"
+[[ -n "${MODE}" ]] || MODE="$(choose_mode)"
+
+case "${MODE}" in
+    single)
+        PROFILE="single"
+        MESSAGE="Switched to Single / VM Auto-Detect Layout"
+        ;;
+    dual | dual-host)
+        PROFILE="dual-host"
+        MESSAGE="Switched to Dual 1440p Layout (DP-1 + HDMI-A-1)"
+        ;;
+    *)
+        die "Unknown monitor mode '${MODE}'. Use 'single' or 'dual'."
+        ;;
+esac
+
+[[ -f "${MONITORS_DIR}/monitors-${PROFILE}.conf" ]] ||
+    die "Missing legacy monitor profile '${PROFILE}'."
+[[ -f "${MONITORS_DIR}/monitors-${PROFILE}.lua" ]] ||
+    die "Missing Lua monitor profile '${PROFILE}'."
+
+atomic_write "${CONFIG_DIR}/monitors.conf" \
+    "# Active Monitor Profile: ${PROFILE}
+source = ~/.config/hypr/monitors/monitors-${PROFILE}.conf"
+atomic_write "${CONFIG_DIR}/monitors.lua" \
+    "-- Active Monitor Profile: ${PROFILE}
+require(\"monitors.monitors-${PROFILE}\")"
+
+if command -v hyprctl >/dev/null 2>&1 && pgrep -x Hyprland >/dev/null; then
+    hyprctl reload >/dev/null 2>&1 || true
+fi
+if command -v notify-send >/dev/null 2>&1 &&
+    [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+    notify-send -i display "Monitor Engine" "${MESSAGE}" || true
 fi
 
-if command -v hyprctl &>/dev/null && pgrep -x Hyprland &>/dev/null; then
-    hyprctl reload 2>/dev/null || true
-fi
-
-if command -v notify-send &>/dev/null; then
-    notify-send -i display "Monitor Engine" "${MSG}"
-fi
-
-echo "${MSG}"
+printf '%s\n' "${MESSAGE}"

@@ -9,5 +9,5 @@
     grey:         #738091;
 
     width: 600;
-    font: "DejaVuSansM Nerd Font 11";
+    font: "JetBrainsMono Nerd Font 11";
 }

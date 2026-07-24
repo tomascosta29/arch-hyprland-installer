@@ -1,38 +1,45 @@
 #!/usr/bin/env python3
-import sys
-import os
 import json
-import gi
-import subprocess
 import math
+import os
 import re
+import subprocess
 import threading
+
+import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk, Gio, Gdk, Pango
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango
 
 try:
     from .dispatch import dispatch_to_main
 except ImportError:
     from dispatch import dispatch_to_main
 
-HISTORY_FILE = os.path.expanduser("~/.config/costa-utils/runner_history.json")
+HISTORY_FILE = os.path.join(
+    os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
+    "costa-utils",
+    "runner_history.json",
+)
+
 
 def load_runner_history():
     try:
         with open(HISTORY_FILE, "r") as f:
             return json.load(f)
-    except:
+    except Exception:
         return []
+
 
 def save_runner_history(history):
     try:
         os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
         with open(HISTORY_FILE, "w") as f:
             json.dump(history[:50], f)
-    except:
+    except Exception:
         pass
+
 
 class AppMenuWindow(Adw.ApplicationWindow):
     def __init__(self, app, runner_mode=False):
@@ -41,16 +48,16 @@ class AppMenuWindow(Adw.ApplicationWindow):
         self.set_default_size(720, 520)
         self.set_modal(True)
         self.set_resizable(False)
-        
+
         # Data
         self.apps = []
         self.filtered_apps = []
         self.selected_index = 0
-        
+
         if self.runner_mode:
             self.history = load_runner_history()
             self.filtered_history = list(self.history)
-            
+
         self.load_css()
         if not self.runner_mode:
             self.load_apps()
@@ -59,11 +66,11 @@ class AppMenuWindow(Adw.ApplicationWindow):
             self.app_monitor.connect("changed", self.on_apps_changed)
         self.build_ui()
         self.setup_keyboard()
-        
+
         # Initial filter
         self.showing_output = False
         self.on_search_changed(self.search_entry)
-        
+
         # Override default close to hide
         self.connect("close-request", self.on_close_request)
         self.connect("notify::is-active", self.on_is_active_changed)
@@ -90,17 +97,14 @@ class AppMenuWindow(Adw.ApplicationWindow):
                 icon = app.get_icon()
                 desc = app.get_description() or ""
                 keywords = app.get_keywords() or []
-                
+
                 # Create a search string for fuzzy matching
                 search_text = f"{name} {desc} {' '.join(keywords)}".lower()
-                
-                self.apps.append({
-                    "app_info": app,
-                    "name": name,
-                    "icon": icon,
-                    "search_text": search_text
-                })
-        
+
+                self.apps.append(
+                    {"app_info": app, "name": name, "icon": icon, "search_text": search_text}
+                )
+
         # Sort alphabetically
         self.apps.sort(key=lambda x: x["name"].lower())
 
@@ -133,7 +137,7 @@ class AppMenuWindow(Adw.ApplicationWindow):
         self.live_result_box.add_css_class("live-result")
         self.live_result_box.set_visible(False)
         self.live_result_box.set_cursor(Gdk.Cursor.new_from_name("pointer", None))
-        
+
         # Add a gesture to make it clickable
         click_gesture = Gtk.GestureClick()
         click_gesture.connect("released", lambda *_: self.on_live_result_clicked())
@@ -148,11 +152,11 @@ class AppMenuWindow(Adw.ApplicationWindow):
         self.live_result_title.add_css_class("dim-label")
         self.live_result_value = Gtk.Label(xalign=0)
         self.live_result_value.add_css_class("live-result-value")
-        
+
         labels_vbox.append(self.live_result_title)
         labels_vbox.append(self.live_result_value)
         self.live_result_box.append(labels_vbox)
-        
+
         main_box.append(self.live_result_box)
         self.live_callback = None
 
@@ -173,7 +177,7 @@ class AppMenuWindow(Adw.ApplicationWindow):
             self.flowbox.set_row_spacing(12)
             self.flowbox.set_activate_on_single_click(True)
             self.flowbox.connect("child-activated", self.on_app_activated)
-        
+
         # Stack for Content
         self.stack = Gtk.Stack()
         self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
@@ -195,28 +199,47 @@ class AppMenuWindow(Adw.ApplicationWindow):
         self.empty_page.set_title("No Results")
         self.empty_page.set_description("Try a different search query")
         self.stack.add_named(self.empty_page, "empty")
-        
+
         self.stack.set_visible_child_name("grid")
 
     def evaluate_math(self, query):
-        if not re.match(r'^[\d\s\+\-\*\/\.\(\)%]+$', query): return None
-        if not any(c in query for c in "+-*/%"): return None
-        if "**" in query: return None
+        if not re.match(r"^[\d\s\+\-\*\/\.\(\)%]+$", query):
+            return None
+        if not any(c in query for c in "+-*/%"):
+            return None
+        if "**" in query:
+            return None
         try:
             res = eval(query, {"__builtins__": None, "math": math}, {})
             if isinstance(res, (int, float)):
                 return f"{res:g}"
-        except: pass
+        except Exception:
+            pass
         return None
 
     def run_terminal(self, cmd):
         def worker():
             try:
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
-                output = result.stdout.strip() or result.stderr.strip() or "Command finished (no output)"
-                GLib.idle_add(self.show_live_result, "Command Output", output, "utilities-terminal-symbolic", lambda: self.copy_to_clipboard(output), True)
+                output = (
+                    result.stdout.strip() or result.stderr.strip() or "Command finished (no output)"
+                )
+                GLib.idle_add(
+                    self.show_live_result,
+                    "Command Output",
+                    output,
+                    "utilities-terminal-symbolic",
+                    lambda: self.copy_to_clipboard(output),
+                    True,
+                )
             except subprocess.TimeoutExpired:
-                GLib.idle_add(self.show_live_result, "Error", "Command timed out", "dialog-error-symbolic", None)
+                GLib.idle_add(
+                    self.show_live_result,
+                    "Error",
+                    "Command timed out",
+                    "dialog-error-symbolic",
+                    None,
+                )
             except Exception as e:
                 GLib.idle_add(self.show_live_result, "Error", str(e), "dialog-error-symbolic", None)
 
@@ -243,14 +266,14 @@ class AppMenuWindow(Adw.ApplicationWindow):
         self.live_result_value.set_label(value)
         self.live_result_icon.set_from_icon_name(icon_name)
         self.live_callback = callback
-        
+
         if is_output:
             self.live_result_value.add_css_class("live-result-output")
             self.live_result_value.remove_css_class("live-result-value")
         else:
             self.live_result_value.add_css_class("live-result-value")
             self.live_result_value.remove_css_class("live-result-output")
-            
+
         self.live_result_box.set_visible(True)
 
     def hide_live_result(self):
@@ -276,25 +299,30 @@ class AppMenuWindow(Adw.ApplicationWindow):
     def on_search_changed(self, entry):
         query = entry.get_text().strip()
         lower_query = query.lower()
-        
+
         if self.showing_output:
-             if not query.startswith(">"):
-                  self.hide_live_result()
-        
+            if not query.startswith(">"):
+                self.hide_live_result()
+
         if not self.showing_output:
             if self.runner_mode:
                 self.history_listbox.remove_all()
             else:
                 self.flowbox.remove_all()
             self.hide_live_result()
-        
+
         has_results = False
-        
+
         # 1. Math Solver
         if query:
             math_res = self.evaluate_math(query)
             if math_res:
-                self.show_live_result("Calculator", math_res, "accessories-calculator-symbolic", lambda: self.copy_to_clipboard(math_res))
+                self.show_live_result(
+                    "Calculator",
+                    math_res,
+                    "accessories-calculator-symbolic",
+                    lambda: self.copy_to_clipboard(math_res),
+                )
                 has_results = True
                 self.showing_output = False
 
@@ -303,13 +331,18 @@ class AppMenuWindow(Adw.ApplicationWindow):
             cmd = query[1:].strip()
             if cmd:
                 if self.showing_output:
-                     has_results = True
+                    has_results = True
                 else:
-                    self.show_live_result("Run Command", cmd, "utilities-terminal-symbolic", lambda: self.run_terminal(cmd))
+                    self.show_live_result(
+                        "Run Command",
+                        cmd,
+                        "utilities-terminal-symbolic",
+                        lambda: self.run_terminal(cmd),
+                    )
                     has_results = True
         else:
             self.showing_output = False
-        
+
         # 3. Content Filtering
         if self.runner_mode:
             if not query.startswith(">"):
@@ -317,9 +350,14 @@ class AppMenuWindow(Adw.ApplicationWindow):
                     self.filtered_history = self.history
                 else:
                     self.filtered_history = [h for h in self.history if lower_query in h.lower()]
-                    self.show_live_result("Run Command", query, "utilities-terminal-symbolic", lambda: self.run_command_line(query))
+                    self.show_live_result(
+                        "Run Command",
+                        query,
+                        "utilities-terminal-symbolic",
+                        lambda: self.run_command_line(query),
+                    )
                     has_results = True
-                
+
                 for cmd in self.filtered_history[:10]:
                     self.history_listbox.append(self.make_history_row(cmd))
                     has_results = True
@@ -329,10 +367,9 @@ class AppMenuWindow(Adw.ApplicationWindow):
                     self.filtered_apps = self.apps
                 else:
                     self.filtered_apps = [
-                        app for app in self.apps 
-                        if lower_query in app["search_text"]
+                        app for app in self.apps if lower_query in app["search_text"]
                     ]
-                    
+
                     def get_match_score(app_item):
                         name_l = app_item["name"].lower()
                         if name_l == lower_query:
@@ -344,12 +381,13 @@ class AppMenuWindow(Adw.ApplicationWindow):
                         if lower_query in name_l:
                             return 3
                         return 4
+
                     self.filtered_apps.sort(key=lambda x: (get_match_score(x), x["name"].lower()))
 
-                for i, app in enumerate(self.filtered_apps[:50]):
+                for _i, app in enumerate(self.filtered_apps[:50]):
                     self.flowbox.append(self.make_app_button(app))
                     has_results = True
-        
+
         if has_results:
             self.stack.set_visible_child_name("grid")
         else:
@@ -360,35 +398,37 @@ class AppMenuWindow(Adw.ApplicationWindow):
         content_box.set_halign(Gtk.Align.CENTER)
         content_box.add_css_class("app-card")
         content_box.app_info = app_data["app_info"]
-        
+
         if app_data["icon"]:
             icon_img = Gtk.Image.new_from_gicon(app_data["icon"])
         else:
             icon_img = Gtk.Image.new_from_icon_name("application-x-executable")
         icon_img.set_pixel_size(48)
         content_box.append(icon_img)
-        
+
         lbl = Gtk.Label(label=app_data["name"])
         lbl.add_css_class("app-label")
         lbl.set_ellipsize(Pango.EllipsizeMode.END)
         lbl.set_max_width_chars(12)
         lbl.set_wrap(False)
         content_box.append(lbl)
-        
+
         return content_box
 
     def make_history_row(self, cmd_text):
         row = Gtk.ListBoxRow()
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        box.set_margin_start(12); box.set_margin_end(12)
-        box.set_margin_top(8); box.set_margin_bottom(8)
-        
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        box.set_margin_top(8)
+        box.set_margin_bottom(8)
+
         icon = Gtk.Image.new_from_icon_name("document-open-recent-symbolic")
         icon.add_css_class("dim-label")
-        
+
         lbl = Gtk.Label(label=cmd_text)
         lbl.set_halign(Gtk.Align.START)
-        
+
         box.append(icon)
         box.append(lbl)
         row.set_child(box)
@@ -403,17 +443,31 @@ class AppMenuWindow(Adw.ApplicationWindow):
         cmd = cmd.strip()
         if not cmd:
             return
-            
+
         if cmd in self.history:
             self.history.remove(cmd)
         self.history.insert(0, cmd)
         save_runner_history(self.history)
-        
+
         try:
             subprocess.Popen(cmd, shell=True, start_new_session=True)
         except Exception as e:
             print(f"Error running command: {e}")
-            
+
+        self.hide_window()
+
+    def run_in_terminal(self, cmd):
+        cmd = cmd.strip()
+        if not cmd:
+            return
+        if cmd in self.history:
+            self.history.remove(cmd)
+        self.history.insert(0, cmd)
+        save_runner_history(self.history)
+        subprocess.Popen(
+            ["kitty", "--hold", "sh", "-lc", cmd],
+            start_new_session=True,
+        )
         self.hide_window()
 
     def setup_keyboard(self):
@@ -428,7 +482,7 @@ class AppMenuWindow(Adw.ApplicationWindow):
             return True
 
         name = Gtk.accelerator_name(keyval, state)
-            
+
         if self.runner_mode:
             if name == "Down":
                 if self.search_entry.has_focus():
@@ -467,7 +521,7 @@ class AppMenuWindow(Adw.ApplicationWindow):
                     if selected and hasattr(selected, "cmd_text"):
                         query = selected.cmd_text
                 if query:
-                    self.run_command_line(f"~/.config/hypr/scripts/alacritty -f -e {query}")
+                    self.run_in_terminal(query)
                 return True
             elif name in ("Return", "KP_Enter"):
                 if not self.search_entry.has_focus():
@@ -479,16 +533,19 @@ class AppMenuWindow(Adw.ApplicationWindow):
             if name == "Down":
                 if self.search_entry.has_focus():
                     child = self.flowbox.get_child_at_index(0)
-                    if child: child.grab_focus()
+                    if child:
+                        child.grab_focus()
                     return True
             elif name == "Up":
                 if not self.search_entry.has_focus():
                     self.search_entry.grab_focus()
                     return True
 
-        if len(name) == 1 and not state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK):
-             if not self.search_entry.has_focus():
-                  self.search_entry.grab_focus()
+        if len(name) == 1 and not state & (
+            Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK
+        ):
+            if not self.search_entry.has_focus():
+                self.search_entry.grab_focus()
         return False
 
     def on_app_activated(self, flowbox, child):
@@ -568,7 +625,10 @@ class AppMenuWindow(Adw.ApplicationWindow):
         """
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
-        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
 
 class AppMenu(Adw.Application):
     def __init__(self):
@@ -579,9 +639,10 @@ class AppMenu(Adw.Application):
     def do_activate(self):
         if not self.win:
             self.win = AppMenuWindow(self)
-        
+
         self.win.present()
         self.win.search_entry.grab_focus()
+
 
 def run():
     if dispatch_to_main("--app-menu"):
@@ -589,6 +650,7 @@ def run():
 
     app = AppMenu()
     app.run([])
+
 
 if __name__ == "__main__":
     run()

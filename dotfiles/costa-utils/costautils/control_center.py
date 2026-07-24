@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-import json
 import os
 import subprocess
 import threading
 import urllib.request
+
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk, Gdk, Gio, GdkPixbuf, Pango
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
+
 
 class ControlCenterWindow(Adw.ApplicationWindow):
     def __init__(self, app):
@@ -16,19 +17,20 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         self.set_default_size(460, 560)
         self.set_resizable(False)
         self.set_modal(True)
-        
+
         self.updating_sliders = False
         self.media_proc = None
+        self.adapter_path = "/org/bluez/hci0"
         self.bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
-        
+
         self.build_ui()
         self.load_css()
-        
+
         # Initial reload
         self.refresh_states()
         self.start_media_monitor()
         self.setup_keyboard()
-        
+
         self.connect("close-request", self.on_close_request)
         self.connect("notify::is-active", self.on_is_active_changed)
 
@@ -71,8 +73,10 @@ class ControlCenterWindow(Adw.ApplicationWindow):
 
         # Main box
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        main_box.set_margin_start(16); main_box.set_margin_end(16)
-        main_box.set_margin_top(16); main_box.set_margin_bottom(16)
+        main_box.set_margin_start(16)
+        main_box.set_margin_end(16)
+        main_box.set_margin_top(16)
+        main_box.set_margin_bottom(16)
         view.set_content(main_box)
 
         # --- TOGGLES GRID ---
@@ -87,19 +91,27 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         main_box.append(grid)
 
         # Wi-Fi Toggle Button
-        self.wifi_btn = self.make_toggle_button("network-wireless-symbolic", "Wi-Fi", "Disconnected", self.on_wifi_toggled)
+        self.wifi_btn = self.make_toggle_button(
+            "network-wireless-symbolic", "Wi-Fi", "Disconnected", self.on_wifi_toggled
+        )
         grid.append(self.wifi_btn)
 
         # Bluetooth Toggle Button
-        self.bt_btn = self.make_toggle_button("bluetooth-active-symbolic", "Bluetooth", "Disabled", self.on_bluetooth_toggled)
+        self.bt_btn = self.make_toggle_button(
+            "bluetooth-active-symbolic", "Bluetooth", "Disabled", self.on_bluetooth_toggled
+        )
         grid.append(self.bt_btn)
 
         # Night Light Toggle Button
-        self.nl_btn = self.make_toggle_button("night-light-symbolic", "Night Light", "Off", self.on_nightlight_toggled)
+        self.nl_btn = self.make_toggle_button(
+            "night-light-symbolic", "Night Light", "Off", self.on_nightlight_toggled
+        )
         grid.append(self.nl_btn)
 
         # Do Not Disturb Toggle Button
-        self.dnd_btn = self.make_toggle_button("notifications-disabled-symbolic", "Do Not Disturb", "Off", self.on_dnd_toggled)
+        self.dnd_btn = self.make_toggle_button(
+            "notifications-disabled-symbolic", "Do Not Disturb", "Off", self.on_dnd_toggled
+        )
         grid.append(self.dnd_btn)
 
         # --- SLIDERS SECTION ---
@@ -155,19 +167,19 @@ class ControlCenterWindow(Adw.ApplicationWindow):
 
         controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         controls_box.set_valign(Gtk.Align.CENTER)
-        
+
         prev_btn = Gtk.Button(icon_name="media-skip-backward-symbolic")
         prev_btn.add_css_class("flat")
         prev_btn.connect("clicked", lambda _: subprocess.run(["playerctl", "previous"]))
-        
+
         self.play_btn = Gtk.Button(icon_name="media-playback-start-symbolic")
         self.play_btn.add_css_class("flat")
         self.play_btn.connect("clicked", lambda _: subprocess.run(["playerctl", "play-pause"]))
-        
+
         next_btn = Gtk.Button(icon_name="media-skip-forward-symbolic")
         next_btn.add_css_class("flat")
         next_btn.connect("clicked", lambda _: subprocess.run(["playerctl", "next"]))
-        
+
         controls_box.append(prev_btn)
         controls_box.append(self.play_btn)
         controls_box.append(next_btn)
@@ -188,36 +200,40 @@ class ControlCenterWindow(Adw.ApplicationWindow):
             return btn
 
         session_box.append(make_action_btn("system-lock-screen-symbolic", "Lock Session", "lock"))
-        session_box.append(make_action_btn("system-suspend-symbolic", "Suspend", ["systemctl", "suspend"]))
-        session_box.append(make_action_btn("system-log-out-symbolic", "Log Out", ["loginctl", "terminate-user", os.environ.get("USER", "")]))
-        session_box.append(make_action_btn("system-reboot-symbolic", "Reboot System", ["systemctl", "reboot"]))
-        session_box.append(make_action_btn("application-exit-symbolic", "Shutdown", ["systemctl", "poweroff"]))
+        session_box.append(
+            make_action_btn(
+                "system-shutdown-symbolic",
+                "Open Power Menu",
+                [os.path.expanduser("~/.local/bin/costa-utils"), "--power-menu"],
+            )
+        )
 
     def make_toggle_button(self, icon_name, title, subtitle, callback):
         btn = Gtk.Button()
         btn.add_css_class("toggle-card")
         btn.connect("clicked", callback)
-        
+
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         box.set_valign(Gtk.Align.CENTER)
-        
+
         icon = Gtk.Image.new_from_icon_name(icon_name)
         icon.set_pixel_size(24)
         box.append(icon)
-        
+
         lbl_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        lbl_vbox.set_hexpand(True); lbl_vbox.set_halign(Gtk.Align.START)
-        
+        lbl_vbox.set_hexpand(True)
+        lbl_vbox.set_halign(Gtk.Align.START)
+
         title_lbl = Gtk.Label(label=title)
         title_lbl.add_css_class("toggle-title")
-        
+
         sub_lbl = Gtk.Label(label=subtitle)
         sub_lbl.add_css_class("toggle-subtitle")
-        
+
         lbl_vbox.append(title_lbl)
         lbl_vbox.append(sub_lbl)
         box.append(lbl_vbox)
-        
+
         btn.set_child(box)
         btn.icon = icon
         btn.title_lbl = title_lbl
@@ -234,20 +250,28 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         def audio_bright_worker():
             try:
                 # Volume Output
-                vol_proc = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True)
+                vol_proc = subprocess.run(
+                    ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True
+                )
                 vol_out = vol_proc.stdout.strip()
                 vol_val = 0
                 if "Volume:" in vol_out:
                     vol_val = int(float(vol_out.split(":")[-1].strip().split(" ")[0]) * 100)
-                
+
                 # Brightness
                 bright_val = 50
                 try:
-                    res = subprocess.run(["light", "-G"], capture_output=True, text=True)
-                    bright_val = int(float(res.stdout.strip()))
-                except:
+                    res = subprocess.run(
+                        ["brightnessctl", "--machine-readable"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    percentage = res.stdout.strip().split(",")[3].rstrip("%")
+                    bright_val = int(percentage)
+                except (IndexError, ValueError, OSError, subprocess.SubprocessError):
                     pass
-                
+
                 GLib.idle_add(self.update_sliders_ui, vol_val, bright_val)
             except Exception as e:
                 print(f"Error loading sliders: {e}")
@@ -255,7 +279,11 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         # 2. Network SSID
         def network_worker():
             try:
-                res = subprocess.run(["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"], capture_output=True, text=True)
+                res = subprocess.run(
+                    ["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
+                    capture_output=True,
+                    text=True,
+                )
                 ssid = "Disconnected"
                 active = False
                 for line in res.stdout.splitlines():
@@ -263,16 +291,18 @@ class ControlCenterWindow(Adw.ApplicationWindow):
                         ssid = line.split(":")[-1].strip()
                         active = True
                         break
-                
+
                 # Check if Wi-Fi interface is powered
-                radio_res = subprocess.run(["nmcli", "radio", "wifi"], capture_output=True, text=True)
+                radio_res = subprocess.run(
+                    ["nmcli", "radio", "wifi"], capture_output=True, text=True
+                )
                 wifi_powered = radio_res.stdout.strip() == "enabled"
                 if not wifi_powered:
                     ssid = "Disabled"
                     active = False
-                    
+
                 GLib.idle_add(self.update_wifi_ui, active, ssid)
-            except:
+            except Exception:
                 pass
 
         # 3. Bluetooth status
@@ -287,42 +317,53 @@ class ControlCenterWindow(Adw.ApplicationWindow):
                     None,
                     Gio.DBusCallFlags.NONE,
                     -1,
-                    None
+                    None,
                 )
                 objects = reply.unpack()[0]
                 powered = False
                 connected_count = 0
-                
+
                 for path, interfaces in objects.items():
                     if "org.bluez.Adapter1" in interfaces:
+                        self.adapter_path = path
                         powered = interfaces["org.bluez.Adapter1"].get("Powered", False)
                     if "org.bluez.Device1" in interfaces:
                         if interfaces["org.bluez.Device1"].get("Connected", False):
                             connected_count += 1
-                
+
                 sub = "Disabled"
                 if powered:
                     sub = f"{connected_count} Connected" if connected_count > 0 else "On"
                 GLib.idle_add(self.update_bluetooth_ui, powered, sub)
-            except:
+            except Exception:
                 pass
 
         # 4. Night Light & DND
         def extras_worker():
-            # Mako DND
             dnd_active = False
             try:
-                res = subprocess.run(["makoctl", "mode"], capture_output=True, text=True)
-                dnd_active = "dnd" in res.stdout.strip()
-            except: pass
-            
-            # Night Light (gammastep)
+                res = subprocess.run(
+                    ["dunstctl", "is-paused"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                dnd_active = res.stdout.strip() == "true"
+            except (OSError, subprocess.SubprocessError):
+                pass
+
             nl_active = False
             try:
-                res = subprocess.run(["pgrep", "-x", "gammastep"], capture_output=True)
-                nl_active = res.returncode == 0
-            except: pass
-            
+                res = subprocess.run(
+                    ["hyprctl", "hyprsunset", "profile"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                nl_active = res.returncode == 0 and "identity" not in res.stdout.lower()
+            except (OSError, subprocess.SubprocessError):
+                pass
+
             GLib.idle_add(self.update_extras_ui, dnd_active, nl_active)
 
         threading.Thread(target=audio_bright_worker, daemon=True).start()
@@ -355,24 +396,36 @@ class ControlCenterWindow(Adw.ApplicationWindow):
     def update_extras_ui(self, dnd, nl):
         self.dnd_btn.active_state = dnd
         self.dnd_btn.sub_lbl.set_label("On" if dnd else "Off")
-        if dnd: self.dnd_btn.add_css_class("active")
-        else: self.dnd_btn.remove_css_class("active")
-        
+        if dnd:
+            self.dnd_btn.add_css_class("active")
+        else:
+            self.dnd_btn.remove_css_class("active")
+
         self.nl_btn.active_state = nl
         self.nl_btn.sub_lbl.set_label("On" if nl else "Off")
-        if nl: self.nl_btn.add_css_class("active")
-        else: self.nl_btn.remove_css_class("active")
+        if nl:
+            self.nl_btn.add_css_class("active")
+        else:
+            self.nl_btn.remove_css_class("active")
 
     # --- SLIDER HANDLERS ---
     def on_vol_slider_changed(self, scale):
-        if self.updating_sliders: return
+        if self.updating_sliders:
+            return
         val = int(scale.get_value())
-        subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"], stdout=subprocess.DEVNULL)
+        subprocess.run(
+            ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"], stdout=subprocess.DEVNULL
+        )
 
     def on_bright_slider_changed(self, scale):
-        if self.updating_sliders: return
+        if self.updating_sliders:
+            return
         val = int(scale.get_value())
-        subprocess.run(["light", "-S", str(val)], stdout=subprocess.DEVNULL)
+        subprocess.run(
+            ["brightnessctl", "set", f"{val}%"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     # --- TOGGLE HANDLERS ---
     def on_wifi_toggled(self, btn):
@@ -381,6 +434,7 @@ class ControlCenterWindow(Adw.ApplicationWindow):
             action = "off" if state else "on"
             subprocess.run(["nmcli", "radio", "wifi", action])
             GLib.idle_add(self.refresh_states)
+
         threading.Thread(target=worker, daemon=True).start()
 
     def on_bluetooth_toggled(self, btn):
@@ -389,56 +443,70 @@ class ControlCenterWindow(Adw.ApplicationWindow):
                 # Toggle Adapter0 power
                 state = btn.active_state
                 action = False if state else True
-                
+
                 # Fetch adapter path if not set
                 self.bus.call_sync(
                     "org.bluez",
                     self.adapter_path,
                     "org.freedesktop.DBus.Properties",
                     "Set",
-                    GLib.Variant("(ssv)", ("org.bluez.Adapter1", "Powered", GLib.Variant("b", action))),
+                    GLib.Variant(
+                        "(ssv)", ("org.bluez.Adapter1", "Powered", GLib.Variant("b", action))
+                    ),
                     None,
                     Gio.DBusCallFlags.NONE,
                     -1,
-                    None
+                    None,
                 )
             except Exception as e:
                 print(f"Error toggling bluetooth: {e}")
             GLib.idle_add(self.refresh_states)
+
         threading.Thread(target=worker, daemon=True).start()
 
     def on_nightlight_toggled(self, btn):
         def worker():
             if btn.active_state:
-                subprocess.run(["pkill", "-x", "gammastep"])
+                subprocess.run(["hyprctl", "hyprsunset", "identity"])
             else:
-                subprocess.Popen(["gammastep", "-O", "4200"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["hyprctl", "hyprsunset", "temperature", "4200"])
             GLib.idle_add(self.refresh_states)
+
         threading.Thread(target=worker, daemon=True).start()
 
     def on_dnd_toggled(self, btn):
-        action = "-r" if btn.active_state else "-a"
-        subprocess.run(["makoctl", "mode", action, "dnd"])
+        state = "false" if btn.active_state else "true"
+        subprocess.run(["dunstctl", "set-paused", state])
         self.refresh_states()
 
     # --- MEDIA MONITORING ---
     def start_media_monitor(self):
-        if self.media_proc: return
-        
+        if self.media_proc:
+            return
+
         def monitor_worker():
             try:
                 self.media_proc = subprocess.Popen(
-                    ["playerctl", "-F", "metadata", "--format", "{{status}}::{{title}}::{{artist}}::{{mpris:artUrl}}"],
-                    stdout=subprocess.PIPE, text=True, stderr=subprocess.DEVNULL, bufsize=1
+                    [
+                        "playerctl",
+                        "-F",
+                        "metadata",
+                        "--format",
+                        "{{status}}::{{title}}::{{artist}}::{{mpris:artUrl}}",
+                    ],
+                    stdout=subprocess.PIPE,
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                    bufsize=1,
                 )
                 for line in iter(self.media_proc.stdout.readline, ""):
                     parts = line.strip().split("::")
                     if len(parts) >= 4:
                         status, title, artist, art_url = parts[0], parts[1], parts[2], parts[3]
                         GLib.idle_add(self.update_media_ui, status, title, artist, art_url)
-            except:
+            except Exception:
                 pass
-                
+
         threading.Thread(target=monitor_worker, daemon=True).start()
 
     def stop_media_monitor(self):
@@ -453,14 +521,18 @@ class ControlCenterWindow(Adw.ApplicationWindow):
 
         self.media_title.set_label(title)
         self.media_artist.set_label(artist)
-        self.play_btn.set_icon_name("media-playback-pause-symbolic" if status == "Playing" else "media-playback-start-symbolic")
-        
+        self.play_btn.set_icon_name(
+            "media-playback-pause-symbolic"
+            if status == "Playing"
+            else "media-playback-start-symbolic"
+        )
+
         # Load art
         if art_url:
             self.load_art_async(art_url)
         else:
             self.media_art.set_from_icon_name("audio-x-generic-symbolic")
-            
+
         self.media_card.set_visible(True)
 
     def load_art_async(self, url):
@@ -469,31 +541,33 @@ class ControlCenterWindow(Adw.ApplicationWindow):
                 if url.startswith("file://"):
                     path = url[7:]
                     pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 48, 48, True)
-                    GLib.idle_add(self.media_art.set_from_paintable, Gdk.Texture.new_for_pixbuf(pix))
+                    GLib.idle_add(
+                        self.media_art.set_from_paintable, Gdk.Texture.new_for_pixbuf(pix)
+                    )
                 elif url.startswith("http://") or url.startswith("https://"):
-                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
                     with urllib.request.urlopen(req, timeout=3) as response:
-                        data = response.read()
+                        data = response.read(2 * 1024 * 1024 + 1)
+                    if len(data) > 2 * 1024 * 1024:
+                        raise ValueError("Media artwork exceeds 2 MiB")
                     loader = GdkPixbuf.PixbufLoader()
                     loader.write(data)
                     loader.close()
                     pix = loader.get_pixbuf()
                     if pix:
                         scaled = pix.scale_simple(48, 48, GdkPixbuf.InterpType.BILINEAR)
-                        GLib.idle_add(self.media_art.set_from_paintable, Gdk.Texture.new_for_pixbuf(scaled))
-            except:
+                        GLib.idle_add(
+                            self.media_art.set_from_paintable, Gdk.Texture.new_for_pixbuf(scaled)
+                        )
+            except Exception:
                 GLib.idle_add(self.media_art.set_from_icon_name, "audio-x-generic-symbolic")
+
         threading.Thread(target=worker, daemon=True).start()
 
     # --- SESSION ACTIONS ---
     def run_session_cmd(self, cmd):
         self.hide()
         if cmd == "lock":
-            # Detect lock cmd
-            for l_cmd in ["hyprlock", "swaylock", "gtklock"]:
-                if subprocess.run(["which", l_cmd], capture_output=True).returncode == 0:
-                    subprocess.Popen([l_cmd])
-                    return
             subprocess.Popen(["loginctl", "lock-session"])
         else:
             try:
@@ -574,4 +648,6 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         """
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
-        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )

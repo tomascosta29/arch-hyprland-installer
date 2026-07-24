@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Costa Utils
+Comment=Open the Costa desktop utility launcher
+Exec=costa-utils --app-menu
+Icon=org.fcosta.CostaUtils
+Terminal=false
+Categories=Utility;
+StartupNotify=true

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 import os
 import subprocess
+
 import gi
-import sys
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Adw, GLib, Gdk, Gtk, Gio
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 try:
     from .dispatch import dispatch_to_main
 except ImportError:
     from dispatch import dispatch_to_main
+
 
 class PowerMenuApp(Adw.Application):
     def __init__(self):
@@ -23,21 +24,51 @@ class PowerMenuApp(Adw.Application):
         win = self.props.active_window or PowerWindow(self)
         win.present()
 
+
 class PowerWindow(Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title="Power Menu")
         self.set_default_size(480, 420)
         self.set_resizable(False)
         self.set_modal(True)
-        
+        self.pending_action_id = None
+        self.confirmation_timeout_id = None
+
         # Actions definition
         self.actions = [
-            {"id": "lock", "label": "Lock", "icon": "system-lock-screen-symbolic", "cmd": self.cmd_lock},
-            {"id": "suspend", "label": "Suspend", "icon": "system-suspend-symbolic", "cmd": ["systemctl", "suspend"]},
-            {"id": "logout", "label": "Log Out", "icon": "system-log-out-symbolic", "cmd": ["loginctl", "terminate-user", os.environ.get("USER", "")]},
-            {"id": "hibernate", "label": "Hibernate", "icon": "system-hibernate-symbolic", "cmd": ["systemctl", "hibernate"]},
-            {"id": "reboot", "label": "Reboot", "icon": "system-reboot-symbolic", "cmd": ["systemctl", "reboot"]},
-            {"id": "shutdown", "label": "Shutdown", "icon": "application-exit-symbolic", "cmd": ["systemctl", "poweroff"]},
+            {
+                "id": "lock",
+                "label": "Lock",
+                "icon": "system-lock-screen-symbolic",
+                "cmd": self.cmd_lock,
+            },
+            {
+                "id": "suspend",
+                "label": "Suspend",
+                "icon": "system-suspend-symbolic",
+                "cmd": ["systemctl", "suspend"],
+            },
+            {
+                "id": "logout",
+                "label": "Log Out",
+                "icon": "system-log-out-symbolic",
+                "cmd": self.cmd_logout,
+                "confirm": True,
+            },
+            {
+                "id": "reboot",
+                "label": "Reboot",
+                "icon": "system-reboot-symbolic",
+                "cmd": ["systemctl", "reboot"],
+                "confirm": True,
+            },
+            {
+                "id": "shutdown",
+                "label": "Shutdown",
+                "icon": "application-exit-symbolic",
+                "cmd": ["systemctl", "poweroff"],
+                "confirm": True,
+            },
         ]
 
         self.build_ui()
@@ -82,10 +113,10 @@ class PowerWindow(Adw.ApplicationWindow):
         self.flowbox.set_row_spacing(20)
         self.flowbox.set_activate_on_single_click(True)
         self.flowbox.connect("child-activated", self.on_item_activated)
-        
+
         for action in self.actions:
             self.flowbox.append(self.make_button(action))
-            
+
         main_box.append(self.flowbox)
 
         # Cancel hint
@@ -96,18 +127,19 @@ class PowerWindow(Adw.ApplicationWindow):
     def make_button(self, action):
         btn = Gtk.Button()
         btn.add_css_class("power-btn")
-        btn.action_cmd = action["cmd"]
-        
+        btn.action = action
+
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         box.set_halign(Gtk.Align.CENTER)
         box.set_valign(Gtk.Align.CENTER)
-        
+
         icon = Gtk.Image.new_from_icon_name(action["icon"])
         icon.set_pixel_size(48)
-        
+
         label = Gtk.Label(label=action["label"])
         label.add_css_class("btn-label")
-        
+        btn.action_label = label
+
         box.append(icon)
         box.append(label)
         btn.set_child(box)
@@ -127,10 +159,19 @@ class PowerWindow(Adw.ApplicationWindow):
 
     def on_item_activated(self, flowbox, child):
         btn = child.get_child()
-        cmd = btn.action_cmd
-        
+        action = btn.action
+
+        if action.get("confirm") and self.pending_action_id != action["id"]:
+            self.reset_confirmation()
+            self.pending_action_id = action["id"]
+            btn.action_label.set_label(f"Confirm {action['label']}")
+            btn.add_css_class("destructive-action")
+            self.confirmation_timeout_id = GLib.timeout_add_seconds(4, self.on_confirmation_expired)
+            return
+
+        self.reset_confirmation()
         self.hide()
-        
+        cmd = action["cmd"]
         if callable(cmd):
             cmd()
         else:
@@ -139,13 +180,33 @@ class PowerWindow(Adw.ApplicationWindow):
             except Exception as e:
                 print(f"Error executing command: {e}")
 
+    def reset_confirmation(self):
+        self.pending_action_id = None
+        if self.confirmation_timeout_id is not None:
+            GLib.source_remove(self.confirmation_timeout_id)
+            self.confirmation_timeout_id = None
+
+        child = self.flowbox.get_first_child()
+        while child:
+            button = child.get_child()
+            button.action_label.set_label(button.action["label"])
+            button.remove_css_class("destructive-action")
+            child = child.get_next_sibling()
+        return False
+
+    def on_confirmation_expired(self):
+        self.confirmation_timeout_id = None
+        return self.reset_confirmation()
+
     def cmd_lock(self):
-        # Try to detect lock command
-        for cmd in ["hyprlock", "swaylock", "gtklock"]:
-            if subprocess.run(["which", cmd], capture_output=True).returncode == 0:
-                subprocess.Popen([cmd])
-                return
         subprocess.Popen(["loginctl", "lock-session"])
+
+    def cmd_logout(self):
+        session_id = os.environ.get("XDG_SESSION_ID")
+        if session_id:
+            subprocess.Popen(["loginctl", "terminate-session", session_id])
+        else:
+            subprocess.Popen(["hyprctl", "dispatch", "exit"])
 
     def load_css(self):
         css = b"""
@@ -175,7 +236,10 @@ class PowerWindow(Adw.ApplicationWindow):
         """
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
-        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
 
 def run():
     if dispatch_to_main("--power-menu"):
@@ -183,6 +247,7 @@ def run():
 
     app = PowerMenuApp()
     app.run([])
+
 
 if __name__ == "__main__":
     run()
