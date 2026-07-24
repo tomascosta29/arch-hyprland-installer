@@ -101,10 +101,11 @@ if [[ -d "${SCRIPT_DIR}/dotfiles" ]]; then
     cp -r "${SCRIPT_DIR}/dotfiles/"* "/mnt/home/${USERNAME}/.config/"
     
     if [[ -d "${SCRIPT_DIR}/dotfiles/costa-utils" ]]; then
-        echo -e "${GREEN}Deploying costa-utils GTK4 utility suite...${NC}"
-        mkdir -p "/mnt/home/${USERNAME}/.local/share" "/mnt/home/${USERNAME}/.local/bin"
+        echo -e "${GREEN}Deploying costa-utils GTK4 utility suite system-wide...${NC}"
+        mkdir -p "/mnt/home/${USERNAME}/.local/share" "/mnt/home/${USERNAME}/.local/bin" "/mnt/usr/local/bin"
         cp -r "${SCRIPT_DIR}/dotfiles/costa-utils" "/mnt/home/${USERNAME}/.local/share/costa-utils"
         ln -sf "/home/${USERNAME}/.local/share/costa-utils/costa_utils.py" "/mnt/home/${USERNAME}/.local/bin/costa-utils"
+        ln -sf "/home/${USERNAME}/.local/share/costa-utils/costa_utils.py" "/mnt/usr/local/bin/costa-utils"
     fi
 fi
 
@@ -136,10 +137,11 @@ echo "${USERNAME}:${USER_PASS}" | chpasswd
 echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/10-wheel
 chmod 440 /etc/sudoers.d/10-wheel
 
-# Add ~/.local/bin to User PATH if missing
+# Add ~/.local/bin to User PATH & System Environment
 if ! grep -q '\.local/bin' "/home/${USERNAME}/.bashrc" 2>/dev/null; then
     echo 'export PATH="${HOME}/.local/bin:${PATH}"' >> "/home/${USERNAME}/.bashrc"
 fi
+echo 'PATH="/usr/local/sbin:/usr/local/bin:/usr/bin:/home/${USERNAME}/.local/bin"' >> /etc/environment
 
 # Fix Ownership of User Home Directory
 chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}"
