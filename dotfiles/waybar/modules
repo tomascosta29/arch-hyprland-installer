@@ -1,62 +1,11 @@
 {
-    // Workspaces
+    // Workspaces: numbered pills; occupied and active states stay distinct.
     "hyprland/workspaces": {
-        "format": "{icon} {windows}",
+        "format": "{id}",
         "all-outputs": false,
         "sort-by": "number",
-        "format-icons": {
-            "1": "1",
-            "2": "2",
-            "3": "3",
-            "4": "4",
-            "5": "5",
-            "6": "6",
-            "7": "7",
-            "8": "8",
-            "9": "1",
-            "10": "2",
-            "11": "3",
-            "12": "4",
-            "13": "5",
-            "14": "6",
-            "15": "7",
-            "16": "8"
-        },
         "persistent-workspaces": {
             "*": 10
-        },
-        "window-rewrite-separator": " ",
-        "window-rewrite-default": "",
-        "window-rewrite": {
-            "class<firefox>": "󰈹",
-            "class<org.mozilla.firefox>": "󰈹",
-            "class<kitty>": "",
-            "class<google-chrome>": "",
-            "class<google-chrome-stable>": "",
-            "class<chromium>": "",
-            "class<code-oss>": "󰨞",
-            "class<vscode>": "󰨞",
-            "class<discord>": "",
-            "class<WebCord>": "",
-            "class<telegram-desktop>": "",
-            "class<org.telegram.desktop>": "",
-            "class<slack>": "󰒱",
-            "class<Signal>": "󰈔",
-            "class<spotify>": "",
-            "class<Spotify>": "",
-            "class<org.gnome.Nautilus>": "󰉋",
-            "class<obsidian>": "󰎚",
-            "class<obs>": "󰐌",
-            "class<vlc>": "󰕼",
-            "class<mpv>": "󰕼",
-            "class<Gimp-2.10>": "",
-            "class<Inkscape>": "",
-            "class<blender>": "󰂫",
-            "class<steam>": "",
-            "class<lutris>": "󰺵",
-            "class<org.gnome.SystemMonitor>": "󰍛",
-            "class<pavucontrol>": "󰓃",
-            "class<nm-connection-editor>": "󰤨"
         }
     },
     // Window Title
@@ -73,10 +22,10 @@
         "icon-size": 18,
         "spacing": 10
     },
-    // Clock
+    // Clock defaults; ~/.config/waybar/user.jsonc overrides the format.
     "clock": {
         "interval": 60,
-        "format": "{:%a %d %b %I:%M %p}",
+        "format": "{:%a %d %b %H:%M}",
         "tooltip-format": "<tt><small>{calendar}</small></tt>"
     },
     // System Icon (Drawer Trigger)
@@ -180,8 +129,7 @@
         "player-icons": {
             "default": "<span>▶</span>",
             "spotify": "<span></span>",
-            "firefox": "<span></span>",
-            "chromium": "<span></span>"
+            "firefox": "<span></span>"
         },
         "status-icons": {
             "paused": "<span>⏸</span>"

@@ -9,6 +9,7 @@ cd "${REPOSITORY_ROOT}"
 bash_files=(
     install.sh
     scripts/deploy-user
+    scripts/e2e-libvirt
     dotfiles/scripts/*
     dotfiles/costa-utils/uninstall.sh
 )

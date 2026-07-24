@@ -375,26 +375,66 @@ class VolumeWindow(Adw.ApplicationWindow):
             return
         val = int(scale.get_value())
         self.out_vol_val.set_label(f"{val}%")
-        subprocess.run(
-            ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"], stdout=subprocess.DEVNULL
-        )
+
+        def worker():
+            try:
+                subprocess.run(
+                    ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"],
+                    stdout=subprocess.DEVNULL,
+                    timeout=5,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                GLib.idle_add(self.show_toast, f"Output volume failed: {error}")
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def on_input_slider_changed(self, scale):
         if self.updating_sliders:
             return
         val = int(scale.get_value())
         self.in_vol_val.set_label(f"{val}%")
-        subprocess.run(
-            ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", f"{val}%"], stdout=subprocess.DEVNULL
-        )
+
+        def worker():
+            try:
+                subprocess.run(
+                    ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", f"{val}%"],
+                    stdout=subprocess.DEVNULL,
+                    timeout=5,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                GLib.idle_add(self.show_toast, f"Input volume failed: {error}")
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def on_output_mute_clicked(self, _):
-        subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])
-        self.refresh_audio_devices()
+        def worker():
+            try:
+                subprocess.run(
+                    ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"],
+                    timeout=5,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                GLib.idle_add(self.show_toast, f"Mute toggle failed: {error}")
+            GLib.idle_add(self.refresh_audio_devices)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def on_input_mute_clicked(self, _):
-        subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"])
-        self.refresh_audio_devices()
+        def worker():
+            try:
+                subprocess.run(
+                    ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"],
+                    timeout=5,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                GLib.idle_add(self.show_toast, f"Mute toggle failed: {error}")
+            GLib.idle_add(self.refresh_audio_devices)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     # --- MEDIA MONITORING ---
     def start_media_monitor(self):
@@ -482,7 +522,13 @@ class VolumeWindow(Adw.ApplicationWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def run_player_cmd(self, action):
-        subprocess.run(["playerctl", action])
+        def worker():
+            try:
+                subprocess.run(["playerctl", action], timeout=5, check=False)
+            except (OSError, subprocess.SubprocessError) as error:
+                GLib.idle_add(self.show_toast, f"Media control failed: {error}")
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def load_css(self):
         css = b"""

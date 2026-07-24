@@ -1,0 +1,16 @@
+[SddmGreeterTheme]
+Name=Costa
+Description=Matched Hyprland theme wallpaper and accent colors
+Author=fcosta
+Copyright=(c) 2026
+License=MIT
+Type=sddm-theme
+Version=1.0
+Website=https://github.com/tomascosta29/arch-hyprland-installer
+Screenshot=background.png
+MainScript=Main.qml
+ConfigFile=theme.conf
+TranslationsDirectory=translations
+Theme-Id=costa
+Theme-API=2.11
+QtVersion=6

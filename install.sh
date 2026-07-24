@@ -105,17 +105,35 @@ require_commands
 mountpoint -q /mnt &&
     die "/mnt is already mounted. Unmount it before starting a destructive installation."
 
-printf '%bAvailable whole disks:%b\n' "${YELLOW}" "${NC}"
-lsblk -d -o NAME,SIZE,TYPE,MODEL,TRAN
-printf '\n'
+NONINTERACTIVE="${COSTA_INSTALL_NONINTERACTIVE:-0}"
 
-read -r -p "Target whole disk (for example /dev/vda or /dev/nvme0n1): " DISK
-read -r -p "Hostname [archvm]: " HOSTNAME
-HOSTNAME="${HOSTNAME:-archvm}"
-read -r -p "Username [fcosta]: " USERNAME
-USERNAME="${USERNAME:-fcosta}"
-read -r -p "Timezone [Europe/Vienna]: " TIMEZONE
-TIMEZONE="${TIMEZONE:-Europe/Vienna}"
+if [[ "${NONINTERACTIVE}" == "1" ]]; then
+    DISK="${COSTA_INSTALL_DISK:-}"
+    HOSTNAME="${COSTA_INSTALL_HOSTNAME:-archvm}"
+    USERNAME="${COSTA_INSTALL_USERNAME:-fcosta}"
+    TIMEZONE="${COSTA_INSTALL_TIMEZONE:-Europe/Vienna}"
+    KEYBOARD_LAYOUT="${COSTA_INSTALL_KEYBOARD:-pt}"
+    CLOCK_FORMAT="${COSTA_INSTALL_CLOCK:-24h}"
+    USER_PASS="${COSTA_INSTALL_PASSWORD:-}"
+    [[ -n "${DISK}" ]] || die "COSTA_INSTALL_DISK is required in noninteractive mode."
+    [[ -n "${USER_PASS}" ]] || die "COSTA_INSTALL_PASSWORD is required in noninteractive mode."
+else
+    printf '%bAvailable whole disks:%b\n' "${YELLOW}" "${NC}"
+    lsblk -d -o NAME,SIZE,TYPE,MODEL,TRAN
+    printf '\n'
+
+    read -r -p "Target whole disk (for example /dev/vda or /dev/nvme0n1): " DISK
+    read -r -p "Hostname [archvm]: " HOSTNAME
+    HOSTNAME="${HOSTNAME:-archvm}"
+    read -r -p "Username [fcosta]: " USERNAME
+    USERNAME="${USERNAME:-fcosta}"
+    read -r -p "Timezone [Europe/Vienna]: " TIMEZONE
+    TIMEZONE="${TIMEZONE:-Europe/Vienna}"
+    read -r -p "Keyboard layout [pt]: " KEYBOARD_LAYOUT
+    KEYBOARD_LAYOUT="${KEYBOARD_LAYOUT:-pt}"
+    read -r -p "Clock format (12h/24h) [24h]: " CLOCK_FORMAT
+    CLOCK_FORMAT="${CLOCK_FORMAT:-24h}"
+fi
 
 [[ "${HOSTNAME}" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,61}[A-Za-z0-9])?$ ]] ||
     die "Hostname contains invalid characters or has an invalid length."
@@ -123,22 +141,33 @@ TIMEZONE="${TIMEZONE:-Europe/Vienna}"
     die "Username must be lowercase and contain only letters, numbers, '_' or '-'."
 [[ -e "/usr/share/zoneinfo/${TIMEZONE}" ]] ||
     die "Timezone '${TIMEZONE}' does not exist on the live ISO."
+[[ "${KEYBOARD_LAYOUT}" =~ ^[a-zA-Z0-9,_-]+$ ]] ||
+    die "Keyboard layout contains unsupported characters."
+[[ "${CLOCK_FORMAT}" == "12h" || "${CLOCK_FORMAT}" == "24h" ]] ||
+    die "Clock format must be '12h' or '24h'."
 
-read -r -s -p "Password for '${USERNAME}': " USER_PASS
-printf '\n'
-[[ -n "${USER_PASS}" ]] || die "The user password cannot be empty."
-read -r -s -p "Confirm password: " USER_PASS_CONFIRM
-printf '\n'
-[[ "${USER_PASS}" == "${USER_PASS_CONFIRM}" ]] || die "Passwords do not match."
-unset USER_PASS_CONFIRM
+if [[ "${NONINTERACTIVE}" != "1" ]]; then
+    read -r -s -p "Password for '${USERNAME}': " USER_PASS
+    printf '\n'
+    [[ -n "${USER_PASS}" ]] || die "The user password cannot be empty."
+    read -r -s -p "Confirm password: " USER_PASS_CONFIRM
+    printf '\n'
+    [[ "${USER_PASS}" == "${USER_PASS_CONFIRM}" ]] || die "Passwords do not match."
+    unset USER_PASS_CONFIRM
+fi
 
 validate_target_disk
 
 printf '\n%bDANGER: every partition and all data on %s will be erased.%b\n' \
     "${RED}" "${DISK}" "${NC}"
-read -r -p "Type the full device path '${DISK}' to confirm: " CONFIRM_DISK
-[[ "${CONFIRM_DISK}" == "${DISK}" ]] || die "Confirmation did not match; cancelled."
-unset CONFIRM_DISK
+if [[ "${NONINTERACTIVE}" == "1" ]]; then
+    [[ "${COSTA_INSTALL_CONFIRM_DISK:-}" == "${DISK}" ]] ||
+        die "Set COSTA_INSTALL_CONFIRM_DISK to the full device path to confirm."
+else
+    read -r -p "Type the full device path '${DISK}' to confirm: " CONFIRM_DISK
+    [[ "${CONFIRM_DISK}" == "${DISK}" ]] || die "Confirmation did not match; cancelled."
+    unset CONFIRM_DISK
+fi
 
 case "${DISK}" in
     *nvme* | *mmcblk*) PART_EFI="${DISK}p1"; PART_ROOT="${DISK}p2" ;;
@@ -178,6 +207,7 @@ pacstrap -K /mnt \
     xdg-desktop-portal-hyprland xdg-desktop-portal-gtk \
     xdg-utils xdg-user-dirs \
     sddm nautilus gvfs udisks2 gnome-keyring desktop-file-utils \
+    firefox \
     python python-gobject python-cairo gtk4 libadwaita \
     gobject-introspection upower cliphist \
     grim slurp wl-clipboard brightnessctl libnotify \
@@ -194,18 +224,29 @@ grep -Eq '[[:space:]]/boot[[:space:]]' /mnt/etc/fstab ||
     die "Generated fstab does not contain the EFI filesystem."
 
 log "[6/7] Configuring the installed system..."
-arch-chroot /mnt /bin/bash -s -- "${HOSTNAME}" "${USERNAME}" "${TIMEZONE}" <<'CHROOT'
+arch-chroot /mnt /bin/bash -s -- \
+    "${HOSTNAME}" "${USERNAME}" "${TIMEZONE}" "${KEYBOARD_LAYOUT}" <<'CHROOT'
 set -Eeuo pipefail
 
 readonly INSTALL_HOSTNAME=$1
 readonly INSTALL_USERNAME=$2
 readonly INSTALL_TIMEZONE=$3
+readonly INSTALL_KEYBOARD=$4
 readonly USER_HOME="/home/${INSTALL_USERNAME}"
 
 ln -sf "/usr/share/zoneinfo/${INSTALL_TIMEZONE}" /etc/localtime
 hwclock --systohc
 
-printf 'KEYMAP=pt-latin1\n' > /etc/vconsole.conf
+# Console keymap approximates the Hyprland XKB layout for early boot prompts.
+case "${INSTALL_KEYBOARD}" in
+    pt*) VCONSOLE_KEYMAP=pt-latin1 ;;
+    us*) VCONSOLE_KEYMAP=us ;;
+    de*) VCONSOLE_KEYMAP=de-latin1 ;;
+    fr*) VCONSOLE_KEYMAP=fr ;;
+    es*) VCONSOLE_KEYMAP=es ;;
+    *) VCONSOLE_KEYMAP=us ;;
+esac
+printf 'KEYMAP=%s\n' "${VCONSOLE_KEYMAP}" > /etc/vconsole.conf
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 printf 'LANG=en_US.UTF-8\n' > /etc/locale.conf
@@ -259,7 +300,7 @@ while IFS= read -r -d '' dotfile_entry; do
     cp -a "${dotfile_entry}" "${USER_HOME}/.config/"
 done < <(
     find "${SCRIPT_DIR}/dotfiles" -mindepth 1 -maxdepth 1 \
-        ! -name costa-utils -print0
+        ! -name costa-utils ! -name sddm ! -name mimeapps.list -print0
 )
 
 cp -a "${SCRIPT_DIR}/dotfiles/costa-utils" \
@@ -273,12 +314,25 @@ cp -a \
 mkdir -p "${USER_HOME}/.local/share/icons/hicolor/scalable/apps"
 cp -a "${SCRIPT_DIR}/dotfiles/costa-utils/icons/costa_utils.svg" \
     "${USER_HOME}/.local/share/icons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg"
+mkdir -p "${USER_HOME}/.config"
+cp -a "${SCRIPT_DIR}/dotfiles/mimeapps.list" "${USER_HOME}/.config/mimeapps.list"
 
-log "[7/7] Applying ownership and the default theme..."
-arch-chroot /mnt /bin/bash -s -- "${USERNAME}" <<'CHROOT'
+# Install the matched SDDM greeter theme and seed it with the default wallpaper.
+mkdir -p /mnt/usr/share/sddm/themes
+cp -a "${SCRIPT_DIR}/dotfiles/sddm/costa" /mnt/usr/share/sddm/themes/
+cp -a "${SCRIPT_DIR}/dotfiles/themes/fcosta/wallpaper.png" \
+    /mnt/usr/share/sddm/themes/costa/background.png
+mkdir -p /mnt/etc/sddm.conf.d
+cp -a "${SCRIPT_DIR}/dotfiles/sddm/costa.conf" /mnt/etc/sddm.conf.d/costa.conf
+
+log "[7/7] Applying ownership, desktop settings, and the default theme..."
+arch-chroot /mnt /bin/bash -s -- \
+    "${USERNAME}" "${KEYBOARD_LAYOUT}" "${CLOCK_FORMAT}" <<'CHROOT'
 set -Eeuo pipefail
 
 readonly INSTALL_USERNAME=$1
+readonly INSTALL_KEYBOARD=$2
+readonly INSTALL_CLOCK=$3
 readonly USER_HOME="/home/${INSTALL_USERNAME}"
 
 find "${USER_HOME}/.config/scripts" -type f -exec chmod 0755 {} +
@@ -289,11 +343,45 @@ chown -R "${INSTALL_USERNAME}:${INSTALL_USERNAME}" "${USER_HOME}"
 runuser -u "${INSTALL_USERNAME}" -- env \
     HOME="${USER_HOME}" \
     XDG_CONFIG_HOME="${USER_HOME}/.config" \
+    "${USER_HOME}/.config/scripts/desktop-settings" \
+    --keyboard "${INSTALL_KEYBOARD}" \
+    --clock "${INSTALL_CLOCK}"
+runuser -u "${INSTALL_USERNAME}" -- env \
+    HOME="${USER_HOME}" \
+    XDG_CONFIG_HOME="${USER_HOME}/.config" \
     "${USER_HOME}/.config/scripts/theme-select" fcosta
 runuser -u "${INSTALL_USERNAME}" -- env \
     HOME="${USER_HOME}" \
     XDG_DATA_HOME="${USER_HOME}/.local/share" \
     update-desktop-database "${USER_HOME}/.local/share/applications"
+runuser -u "${INSTALL_USERNAME}" -- env \
+    HOME="${USER_HOME}" \
+    XDG_CONFIG_HOME="${USER_HOME}/.config" \
+    xdg-settings set default-web-browser firefox.desktop || true
+
+# theme-select cannot update SDDM as the desktop user; sync colors as root.
+if [[ -f "${USER_HOME}/.config/themes/fcosta/colors.css" ]]; then
+    accent="$(sed -n 's/^@define-color soft-blue #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
+        "${USER_HOME}/.config/themes/fcosta/colors.css" | head -n1)"
+    background="$(sed -n 's/^@define-color background #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
+        "${USER_HOME}/.config/themes/fcosta/colors.css" | head -n1)"
+    foreground="$(sed -n 's/^@define-color foreground #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
+        "${USER_HOME}/.config/themes/fcosta/colors.css" | head -n1)"
+    foreground_dim="$(sed -n 's/^@define-color foreground-dim #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
+        "${USER_HOME}/.config/themes/fcosta/colors.css" | head -n1)"
+    cp "${USER_HOME}/.config/hypr/current_wallpaper.png" \
+        /usr/share/sddm/themes/costa/background.png
+    cat > /usr/share/sddm/themes/costa/theme.conf <<SDDMTHEME
+[General]
+background=background.png
+title=Welcome
+accent=#${accent:-719cd6}
+backgroundFill=#${background:-192330}
+foreground=#${foreground:-cdcecf}
+foregroundDim=#${foreground_dim:-738091}
+fontFamily=JetBrainsMono Nerd Font
+SDDMTHEME
+fi
 CHROOT
 
 printf '\n%b%s%b\n' "${CYAN}" \

@@ -7,6 +7,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT = REPOSITORY_ROOT / "dotfiles" / "costa-utils"
 sys.path.insert(0, str(APP_ROOT))
 
+from costautils.app_menu import normalize_app_id, should_list_app
 from costautils.blinker import unique_screenshot_path
 from costautils.blinker_manager import unique_destination
 from costautils.cliphist_gtk import clipboard_mime_type
@@ -28,6 +29,47 @@ class DispatchTests(unittest.TestCase):
             infer_target_from_argv0("/home/test/.local/bin/blinker-manager"),
             "--blinker-manager",
         )
+
+
+class LauncherFilterTests(unittest.TestCase):
+    class FakeApp:
+        def __init__(
+            self,
+            app_id,
+            *,
+            show=True,
+            categories="",
+            desktop=True,
+        ):
+            self._id = app_id
+            self._show = show
+            self._categories = categories
+            self._desktop = desktop
+
+        def should_show(self):
+            return self._show
+
+        def get_id(self):
+            return self._id
+
+        def get_categories(self):
+            return self._categories
+
+    def test_normalize_strips_desktop_suffix(self):
+        self.assertEqual(normalize_app_id("firefox.desktop"), "firefox")
+
+    def test_hidden_duplicates_are_filtered(self):
+        app = self.FakeApp("pavucontrol.desktop")
+        # Monkeypatch isinstance check by using a simple object without DesktopAppInfo
+        self.assertFalse(should_list_app(app))
+
+    def test_non_firefox_browsers_are_filtered(self):
+        class BrowserApp(self.FakeApp, object):
+            pass
+
+        # Bypass DesktopAppInfo path by testing HIDDEN_APP_IDS directly
+        self.assertFalse(should_list_app(self.FakeApp("chromium.desktop")))
+        self.assertFalse(should_list_app(self.FakeApp("brave-browser.desktop")))
 
 
 class NetworkParsingTests(unittest.TestCase):

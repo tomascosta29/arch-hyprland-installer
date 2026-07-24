@@ -5,6 +5,7 @@ set -Eeuo pipefail
 
 readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
 readonly THEMES_DIR="${CONFIG_DIR}/themes"
+readonly SDDM_THEME_DIR="/usr/share/sddm/themes/costa"
 readonly REQUIRED_FILES=(
     colors.conf
     colors.css
@@ -12,6 +13,7 @@ readonly REQUIRED_FILES=(
     dunstrc
     gtk-4.0/gtk.css
     kitty-theme.conf
+    lock.conf
     rofi-theme.rasi
     wallpaper.png
 )
@@ -49,6 +51,45 @@ atomic_install() {
     mv -f "${temp_file}" "${destination_file}"
 }
 
+sync_sddm_theme() {
+    local accent background foreground foreground_dim theme_conf
+
+    [[ -d "${SDDM_THEME_DIR}" && -w "${SDDM_THEME_DIR}" ]] || return 0
+
+    accent="$(
+        sed -n 's/^@define-color soft-blue #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
+            "${TARGET_THEME}/colors.css" | head -n1
+    )"
+    background="$(
+        sed -n 's/^@define-color background #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
+            "${TARGET_THEME}/colors.css" | head -n1
+    )"
+    foreground="$(
+        sed -n 's/^@define-color foreground #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
+            "${TARGET_THEME}/colors.css" | head -n1
+    )"
+    foreground_dim="$(
+        sed -n 's/^@define-color foreground-dim #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
+            "${TARGET_THEME}/colors.css" | head -n1
+    )"
+
+    [[ -n "${accent}" && -n "${background}" && -n "${foreground}" ]] || return 0
+
+    cp "${TARGET_THEME}/wallpaper.png" "${SDDM_THEME_DIR}/background.png"
+    theme_conf="$(cat <<EOF
+[General]
+background=background.png
+title=Welcome
+accent=#${accent}
+backgroundFill=#${background}
+foreground=#${foreground}
+foregroundDim=#${foreground_dim:-738091}
+fontFamily=JetBrainsMono Nerd Font
+EOF
+)"
+    printf '%s\n' "${theme_conf}" > "${SDDM_THEME_DIR}/theme.conf"
+}
+
 if (($# > 1)); then
     die "Usage: theme-select [theme-name]"
 fi
@@ -73,6 +114,8 @@ atomic_install "${TARGET_THEME}/colors.conf" \
     "${CONFIG_DIR}/hypr/current_colors.conf"
 atomic_install "${TARGET_THEME}/colors.lua" \
     "${CONFIG_DIR}/hypr/current_colors.lua"
+atomic_install "${TARGET_THEME}/lock.conf" \
+    "${CONFIG_DIR}/hypr/current_lock.conf"
 atomic_install "${TARGET_THEME}/colors.css" \
     "${CONFIG_DIR}/waybar/colors.css"
 atomic_install "${TARGET_THEME}/kitty-theme.conf" \
@@ -94,6 +137,8 @@ splash = false
 HYPRPAPER
 chmod 0644 "${hyprpaper_temp}"
 mv -f "${hyprpaper_temp}" "${CONFIG_DIR}/hypr/hyprpaper.conf"
+
+sync_sddm_theme || true
 
 if command -v hyprctl >/dev/null 2>&1 && pgrep -x Hyprland >/dev/null; then
     hyprctl reload >/dev/null 2>&1 || true

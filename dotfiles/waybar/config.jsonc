@@ -1,6 +1,9 @@
 // Waybar config file
 {
-    "include": "~/.config/waybar/modules",
+    "include": [
+        "~/.config/waybar/modules",
+        "~/.config/waybar/user.jsonc"
+    ],
     "layer": "top",
     "exclusive": true,
     "passthrough": false,

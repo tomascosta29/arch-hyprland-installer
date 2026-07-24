@@ -170,15 +170,15 @@ class ControlCenterWindow(Adw.ApplicationWindow):
 
         prev_btn = Gtk.Button(icon_name="media-skip-backward-symbolic")
         prev_btn.add_css_class("flat")
-        prev_btn.connect("clicked", lambda _: subprocess.run(["playerctl", "previous"]))
+        prev_btn.connect("clicked", lambda _: self.run_player_cmd("previous"))
 
         self.play_btn = Gtk.Button(icon_name="media-playback-start-symbolic")
         self.play_btn.add_css_class("flat")
-        self.play_btn.connect("clicked", lambda _: subprocess.run(["playerctl", "play-pause"]))
+        self.play_btn.connect("clicked", lambda _: self.run_player_cmd("play-pause"))
 
         next_btn = Gtk.Button(icon_name="media-skip-forward-symbolic")
         next_btn.add_css_class("flat")
-        next_btn.connect("clicked", lambda _: subprocess.run(["playerctl", "next"]))
+        next_btn.connect("clicked", lambda _: self.run_player_cmd("next"))
 
         controls_box.append(prev_btn)
         controls_box.append(self.play_btn)
@@ -279,22 +279,34 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         # 2. Network SSID
         def network_worker():
             try:
+                from costautils.network_menu import parse_nmcli_terse
+            except ImportError:
+                from network_menu import parse_nmcli_terse
+
+            try:
                 res = subprocess.run(
                     ["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
                     capture_output=True,
                     text=True,
+                    timeout=8,
+                    check=False,
                 )
                 ssid = "Disconnected"
                 active = False
                 for line in res.stdout.splitlines():
-                    if line.startswith("yes:"):
-                        ssid = line.split(":")[-1].strip()
+                    fields = parse_nmcli_terse(line)
+                    if len(fields) >= 2 and fields[0] == "yes":
+                        ssid = fields[1] or "Connected"
                         active = True
                         break
 
                 # Check if Wi-Fi interface is powered
                 radio_res = subprocess.run(
-                    ["nmcli", "radio", "wifi"], capture_output=True, text=True
+                    ["nmcli", "radio", "wifi"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
                 )
                 wifi_powered = radio_res.stdout.strip() == "enabled"
                 if not wifi_powered:
@@ -302,8 +314,8 @@ class ControlCenterWindow(Adw.ApplicationWindow):
                     active = False
 
                 GLib.idle_add(self.update_wifi_ui, active, ssid)
-            except Exception:
-                pass
+            except Exception as error:
+                GLib.idle_add(self.show_toast, f"Wi-Fi status unavailable: {error}")
 
         # 3. Bluetooth status
         def bluetooth_worker():
@@ -413,19 +425,38 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         if self.updating_sliders:
             return
         val = int(scale.get_value())
-        subprocess.run(
-            ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"], stdout=subprocess.DEVNULL
-        )
+
+        def worker():
+            try:
+                subprocess.run(
+                    ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"],
+                    stdout=subprocess.DEVNULL,
+                    timeout=5,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                GLib.idle_add(self.show_toast, f"Volume update failed: {error}")
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def on_bright_slider_changed(self, scale):
         if self.updating_sliders:
             return
         val = int(scale.get_value())
-        subprocess.run(
-            ["brightnessctl", "set", f"{val}%"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+
+        def worker():
+            try:
+                subprocess.run(
+                    ["brightnessctl", "set", f"{val}%"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                GLib.idle_add(self.show_toast, f"Brightness unavailable: {error}")
+
+        threading.Thread(target=worker, daemon=True).start()
 
     # --- TOGGLE HANDLERS ---
     def on_wifi_toggled(self, btn):
@@ -460,24 +491,47 @@ class ControlCenterWindow(Adw.ApplicationWindow):
                 )
             except Exception as e:
                 print(f"Error toggling bluetooth: {e}")
+                GLib.idle_add(self.show_toast, f"Bluetooth toggle failed: {e}")
             GLib.idle_add(self.refresh_states)
 
         threading.Thread(target=worker, daemon=True).start()
 
     def on_nightlight_toggled(self, btn):
         def worker():
-            if btn.active_state:
-                subprocess.run(["hyprctl", "hyprsunset", "identity"])
-            else:
-                subprocess.run(["hyprctl", "hyprsunset", "temperature", "4200"])
+            try:
+                if btn.active_state:
+                    subprocess.run(
+                        ["hyprctl", "hyprsunset", "identity"],
+                        timeout=5,
+                        check=False,
+                    )
+                else:
+                    subprocess.run(
+                        ["hyprctl", "hyprsunset", "temperature", "4200"],
+                        timeout=5,
+                        check=False,
+                    )
+            except (OSError, subprocess.SubprocessError) as error:
+                GLib.idle_add(self.show_toast, f"Night light failed: {error}")
             GLib.idle_add(self.refresh_states)
 
         threading.Thread(target=worker, daemon=True).start()
 
     def on_dnd_toggled(self, btn):
         state = "false" if btn.active_state else "true"
-        subprocess.run(["dunstctl", "set-paused", state])
-        self.refresh_states()
+
+        def worker():
+            try:
+                subprocess.run(
+                    ["dunstctl", "set-paused", state],
+                    timeout=5,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                GLib.idle_add(self.show_toast, f"Do Not Disturb failed: {error}")
+            GLib.idle_add(self.refresh_states)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     # --- MEDIA MONITORING ---
     def start_media_monitor(self):
@@ -561,6 +615,15 @@ class ControlCenterWindow(Adw.ApplicationWindow):
                         )
             except Exception:
                 GLib.idle_add(self.media_art.set_from_icon_name, "audio-x-generic-symbolic")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def run_player_cmd(self, action):
+        def worker():
+            try:
+                subprocess.run(["playerctl", action], timeout=5, check=False)
+            except (OSError, subprocess.SubprocessError) as error:
+                GLib.idle_add(self.show_toast, f"Media control failed: {error}")
 
         threading.Thread(target=worker, daemon=True).start()
 

@@ -17,13 +17,19 @@ class InstallerTests(unittest.TestCase):
         self.assertNotRegex(self.installer, r"genfstab[^\n]+/mnt/fstab(?:\s|$)")
 
     def test_chroot_heredocs_do_not_expand_live_environment(self):
-        chroot_invocations = re.findall(r"arch-chroot[^\n]+<<'CHROOT'", self.installer)
+        chroot_invocations = re.findall(
+            r"arch-chroot.*?<<'CHROOT'",
+            self.installer,
+            flags=re.DOTALL,
+        )
         self.assertEqual(len(chroot_invocations), 2)
+        self.assertNotRegex(self.installer, r"arch-chroot.*?<<CHROOT")
 
     def test_single_choice_desktop_stack(self):
         expected = {
             "nautilus",
             "kitty",
+            "firefox",
             "hyprlock",
             "hypridle",
             "dunst",
@@ -34,6 +40,7 @@ class InstallerTests(unittest.TestCase):
             "pacman-contrib",
             "rofi",
             "otf-font-awesome",
+            "sddm",
         }
         for package in expected:
             self.assertRegex(self.installer, rf"\b{re.escape(package)}\b")
@@ -47,9 +54,24 @@ class InstallerTests(unittest.TestCase):
             "polkit-kde-agent",
             "rofi-wayland",
             "ttf-font-awesome",
+            "chromium",
+            "google-chrome",
+            "brave",
+            "epiphany",
         }
         for package in rejected:
             self.assertNotRegex(self.installer, rf"\b{re.escape(package)}\b")
+
+    def test_installer_offers_keyboard_and_clock_settings(self):
+        self.assertIn("KEYBOARD_LAYOUT", self.installer)
+        self.assertIn("CLOCK_FORMAT", self.installer)
+        self.assertIn("desktop-settings", self.installer)
+        self.assertIn("COSTA_INSTALL_NONINTERACTIVE", self.installer)
+
+    def test_sddm_theme_is_installed(self):
+        self.assertIn("dotfiles/sddm/costa", self.installer)
+        self.assertIn("/etc/sddm.conf.d/costa.conf", self.installer)
+        self.assertIn("firefox.desktop", self.installer)
 
     def test_amd_baseline_is_explicit(self):
         for package in (
@@ -78,6 +100,7 @@ class ThemeTests(unittest.TestCase):
             "dunstrc",
             "gtk-4.0/gtk.css",
             "kitty-theme.conf",
+            "lock.conf",
             "rofi-theme.rasi",
             "wallpaper.png",
         }
@@ -124,9 +147,28 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_waybar_jsonc_is_valid(self):
         waybar_dir = REPOSITORY_ROOT / "dotfiles" / "waybar"
-        for filename in ("config.jsonc", "modules"):
+        for filename in ("config.jsonc", "modules", "user.jsonc"):
             parsed = self.load_jsonc(waybar_dir / filename)
             self.assertIsInstance(parsed, dict)
+
+    def test_waybar_workspaces_are_numbered(self):
+        modules = self.load_jsonc(REPOSITORY_ROOT / "dotfiles" / "waybar" / "modules")
+        workspaces = modules["hyprland/workspaces"]
+        self.assertEqual(workspaces["format"], "{id}")
+        self.assertNotIn("format-icons", workspaces)
+
+    def test_hyprlock_sources_theme_lock_colors(self):
+        lock = (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprlock.conf").read_text()
+        self.assertIn("source = ~/.config/hypr/current_lock.conf", lock)
+        self.assertIn("path = $lock_wallpaper", lock)
+
+    def test_sddm_theme_metadata_exists(self):
+        theme_dir = REPOSITORY_ROOT / "dotfiles" / "sddm" / "costa"
+        self.assertTrue((theme_dir / "Main.qml").is_file())
+        self.assertTrue((theme_dir / "metadata.desktop").is_file())
+        self.assertTrue((theme_dir / "theme.conf").is_file())
+        conf = (REPOSITORY_ROOT / "dotfiles" / "sddm" / "costa.conf").read_text()
+        self.assertIn("Current=costa", conf)
 
     def test_svg_icons_are_well_formed(self):
         icons_dir = REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "icons"

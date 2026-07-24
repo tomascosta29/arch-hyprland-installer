@@ -30,9 +30,11 @@ There is one default tool for each core job:
 |---|---|
 | Compositor | Hyprland |
 | Terminal | Kitty |
+| Browser | Firefox |
 | File manager | Nautilus |
 | Application launcher | Costa Utils |
 | Lock and idle | Hyprlock + Hypridle |
+| Display manager | SDDM (`costa` theme) |
 | Notifications | Dunst |
 | Wallpaper | Hyprpaper |
 | Night light | Hyprsunset |
@@ -87,6 +89,7 @@ VirtIO/SPICE channel is harmless.
 |---|---|
 | `Super+Return` or `Super+Q` | Kitty |
 | `Super+E` | Nautilus |
+| `Super+B` | Firefox |
 | `Super+R` | Application menu |
 | `Super+V` | Clipboard history |
 | `Super+P` | Confirmed power menu |
@@ -94,10 +97,13 @@ VirtIO/SPICE channel is harmless.
 | `Print` | Screenshot launcher |
 | `Super+Alt+T` | Theme selector |
 | `Super+Alt+M` | Monitor selector |
+| `Super+Alt+K` | Keyboard and clock settings |
 | `Super+Shift+M` | Exit Hyprland |
 
 Clipboard text and image watchers start with Hyprland. The power menu omits
-hibernate because the installer intentionally creates no swap.
+hibernate because the installer intentionally creates no swap. The Costa
+launcher hides duplicate utilities and non-Firefox browsers so each role stays
+singular.
 
 ## Themes and monitors
 
@@ -108,11 +114,15 @@ hibernate because the installer intentionally creates no swap.
 
 ~/.config/scripts/monitor-select single
 ~/.config/scripts/monitor-select dual
+
+~/.config/scripts/desktop-settings --keyboard pt --clock 24h
+~/.config/scripts/desktop-settings --show
 ```
 
 Switching validates all required theme files and atomically replaces individual
-runtime files. Both current Lua and legacy Hyprland monitor/color files are kept
-in sync. The dual profile targets:
+runtime files. Hyprlock colors/wallpaper and the SDDM greeter assets stay in
+sync with the active theme when permissions allow. Both current Lua and legacy
+Hyprland monitor/color files are kept in sync. The dual profile targets:
 
 - `DP-1`: 2560×1440 at 180 Hz with adaptive sync;
 - `HDMI-A-1`: 2560×1440 at 144 Hz.
@@ -131,6 +141,17 @@ The suite checks Bash syntax, Python formatting and lint, unit tests, Lua syntax
 desktop entries, and repository invariants. It currently covers installer
 safety properties, AMD dependencies, theme completeness, SSID escaping,
 clipboard MIME handling, launcher dispatch, and screenshot collision handling.
+
+Disposable libvirt smoke testing (never destroys the validated `archlinux` VM):
+
+```bash
+./scripts/e2e-libvirt --smoke
+```
+
+That boots a temporary qcow2 overlay, verifies fstab/services/Hyprland through
+the QEMU guest agent, then deletes the disposable domain. A longer
+`--full-install` path can boot an Arch ISO onto a fresh disposable disk when
+`COSTA_E2E_CONFIRM_DESTROY=1` is set.
 
 To update an existing user's checked-out configuration without running the
 destructive installer:

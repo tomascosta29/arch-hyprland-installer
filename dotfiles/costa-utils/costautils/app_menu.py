@@ -23,6 +23,85 @@ HISTORY_FILE = os.path.join(
     "runner_history.json",
 )
 
+# Desktop IDs that duplicate Costa Utils roles or are noise on this stack.
+HIDDEN_APP_IDS = {
+    id_.lower()
+    for id_ in {
+        "org.fcosta.CostaUtils",
+        "avahi-discover",
+        "bssh",
+        "bvnc",
+        "qv4l2",
+        "qvidcap",
+        "htop",
+        "nvim",
+        "nvim-qt",
+        "cmake-gui",
+        "electron",
+        "nm-connection-editor",
+        "pavucontrol",
+        "org.pulseaudio.pavucontrol",
+        "blueman-manager",
+        "blueman-adapters",
+        "chromium",
+        "chromium-browser",
+        "org.chromium.Chromium",
+        "google-chrome",
+        "com.google.Chrome",
+        "brave-browser",
+        "org.brave.Browser",
+        "microsoft-edge",
+        "opera",
+        "vivaldi-stable",
+        "librewolf",
+        "org.gnome.Software",
+        "org.freedesktop.Xwayland",
+        "xdvi",
+        "lstopo",
+        "xgps",
+        "xgpsspeed",
+        "rofi",
+        "rofi-theme-selector",
+    }
+}
+
+HIDDEN_APP_ID_PREFIXES = (
+    "org.gnome.Settings",
+    "org.gnome.SystemMonitor",
+    "gnome-system-monitor",
+    "qv4l2",
+)
+
+
+def normalize_app_id(app_id):
+    if not app_id:
+        return ""
+    return app_id.removesuffix(".desktop").lower()
+
+
+def should_list_app(app_info):
+    """Return True when an application belongs in the Costa launcher."""
+    if not app_info.should_show():
+        return False
+
+    app_id = normalize_app_id(app_info.get_id())
+    if not app_id:
+        return False
+    if app_id in HIDDEN_APP_IDS:
+        return False
+    if any(app_id.startswith(prefix.lower()) for prefix in HIDDEN_APP_ID_PREFIXES):
+        return False
+
+    # Keep Firefox as the only browser; hide any other WebBrowser entries.
+    categories = set()
+    if isinstance(app_info, Gio.DesktopAppInfo):
+        raw_categories = app_info.get_categories() or ""
+        categories = {item.lower() for item in raw_categories.split(";") if item}
+    if "webbrowser" in categories and app_id not in {"firefox", "org.mozilla.firefox"}:
+        return False
+
+    return True
+
 
 def load_runner_history():
     try:
@@ -92,18 +171,20 @@ class AppMenuWindow(Adw.ApplicationWindow):
         # Use Gio to get all desktop apps
         all_apps = Gio.AppInfo.get_all()
         for app in all_apps:
-            if app.should_show():
-                name = app.get_name()
-                icon = app.get_icon()
-                desc = app.get_description() or ""
-                keywords = app.get_keywords() or []
+            if not should_list_app(app):
+                continue
 
-                # Create a search string for fuzzy matching
-                search_text = f"{name} {desc} {' '.join(keywords)}".lower()
+            name = app.get_name()
+            icon = app.get_icon()
+            desc = app.get_description() or ""
+            keywords = app.get_keywords() or []
 
-                self.apps.append(
-                    {"app_info": app, "name": name, "icon": icon, "search_text": search_text}
-                )
+            # Create a search string for fuzzy matching
+            search_text = f"{name} {desc} {' '.join(keywords)}".lower()
+
+            self.apps.append(
+                {"app_info": app, "name": name, "icon": icon, "search_text": search_text}
+            )
 
         # Sort alphabetically
         self.apps.sort(key=lambda x: x["name"].lower())

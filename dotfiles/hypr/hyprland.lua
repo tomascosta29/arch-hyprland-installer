@@ -3,9 +3,11 @@
 
 require("current_colors")
 require("monitors")
+require("input")
 
 local terminal = "kitty"
 local file_manager = "nautilus"
+local browser = "firefox"
 local costa_utils = "~/.local/bin/costa-utils"
 local scripts = "~/.config/scripts"
 local main_mod = "SUPER"
@@ -39,14 +41,6 @@ hl.config({
     },
     animations = {
         enabled = true,
-    },
-    input = {
-        kb_layout = "pt",
-        follow_mouse = 1,
-        sensitivity = 0,
-        touchpad = {
-            natural_scroll = false,
-        },
     },
     dwindle = {
         preserve_split = true,
@@ -99,6 +93,7 @@ hl.bind(main_mod .. " + Q", hl.dsp.exec_cmd(terminal))
 hl.bind(main_mod .. " + C", hl.dsp.window.close())
 hl.bind(main_mod .. " + SHIFT + M", hl.dsp.exit())
 hl.bind(main_mod .. " + E", hl.dsp.exec_cmd(file_manager))
+hl.bind(main_mod .. " + B", hl.dsp.exec_cmd(browser))
 hl.bind(main_mod .. " + V", hl.dsp.exec_cmd(costa_utils .. " --clipper"))
 hl.bind(main_mod .. " + P", hl.dsp.exec_cmd(costa_utils .. " --power-menu"))
 hl.bind(main_mod .. " + F", hl.dsp.window.fullscreen())
@@ -110,6 +105,7 @@ hl.bind(
 )
 hl.bind(main_mod .. " + ALT + T", hl.dsp.exec_cmd(scripts .. "/theme-select"))
 hl.bind(main_mod .. " + ALT + M", hl.dsp.exec_cmd(scripts .. "/monitor-select"))
+hl.bind(main_mod .. " + ALT + K", hl.dsp.exec_cmd(scripts .. "/desktop-settings"))
 hl.bind("Print", hl.dsp.exec_cmd(costa_utils .. " --blinker"))
 hl.bind(main_mod .. " + L", hl.dsp.exec_cmd("loginctl lock-session"))
 
