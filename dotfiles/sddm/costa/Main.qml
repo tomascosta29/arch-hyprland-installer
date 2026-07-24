@@ -47,7 +47,7 @@ Rectangle {
             font.pixelSize: 18
         }
 
-        Text {
+        TextField {
             id: userField
             width: parent.width
             height: 48

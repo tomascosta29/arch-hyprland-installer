@@ -171,6 +171,8 @@ class ConfigurationTests(unittest.TestCase):
         self.assertTrue((theme_dir / "Main.qml").is_file())
         self.assertTrue((theme_dir / "metadata.desktop").is_file())
         self.assertTrue((theme_dir / "theme.conf").is_file())
+        qml = (theme_dir / "Main.qml").read_text()
+        self.assertRegex(qml, r"TextField\s*\{\s*id:\s*userField")
         conf = (REPOSITORY_ROOT / "dotfiles" / "sddm" / "costa.conf").read_text()
         self.assertIn("Current=costa", conf)
 
