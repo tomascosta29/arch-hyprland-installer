@@ -1,5 +1,4 @@
 -- Hyprland 0.55+ configuration.
--- The legacy hyprland.conf remains as a compatibility fallback for older VMs.
 
 require("current_colors")
 require("monitors")
@@ -76,22 +75,26 @@ hl.window_rule({
 })
 
 hl.on("hyprland.start", function()
-    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
-    hl.exec_cmd("systemctl --user start hyprpolkitagent.service")
-    hl.exec_cmd("hyprpaper")
-    hl.exec_cmd("hypridle")
-    hl.exec_cmd("hyprsunset")
-    hl.exec_cmd("waybar")
-    hl.exec_cmd("dunst")
-    hl.exec_cmd("command -v spice-vdagent >/dev/null 2>&1 && spice-vdagent")
-    hl.exec_cmd("wl-paste --type text --watch cliphist store")
-    hl.exec_cmd("wl-paste --type image --watch cliphist store")
+    hl.exec_cmd(
+        "dbus-update-activation-environment --systemd "
+            .. "WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE "
+            .. "&& systemctl --user start hyprland-session.target"
+    )
+end)
+
+hl.on("hyprland.shutdown", function()
+    os.execute("systemctl --user stop hyprland-session.target && sleep 0.1")
 end)
 
 hl.bind(main_mod .. " + Return", hl.dsp.exec_cmd(terminal))
 hl.bind(main_mod .. " + Q", hl.dsp.exec_cmd(terminal))
 hl.bind(main_mod .. " + C", hl.dsp.window.close())
-hl.bind(main_mod .. " + SHIFT + M", hl.dsp.exit())
+hl.bind(
+    main_mod .. " + SHIFT + M",
+    hl.dsp.exec_cmd(
+        "command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"
+    )
+)
 hl.bind(main_mod .. " + E", hl.dsp.exec_cmd(file_manager))
 hl.bind(main_mod .. " + B", hl.dsp.exec_cmd(browser))
 hl.bind(main_mod .. " + V", hl.dsp.exec_cmd(costa_utils .. " --clipper"))

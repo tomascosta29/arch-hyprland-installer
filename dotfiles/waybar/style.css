@@ -228,19 +228,6 @@ window#waybar #workspaces button.active {
     color: inherit;
 }
 
-/* Player */
-#mpris {
-    color: alpha(@foreground, 0.75);
-    background-color: transparent;
-    margin: 3px 8px;
-    font-style: normal;
-}
-
-#mpris.paused {
-    color: @soft-grey;
-    font-style: italic;
-}
-
 /* Clock - Accent Style */
 #clock {
     background-color: @soft-blue;
@@ -362,4 +349,8 @@ window#waybar #workspaces button.active {
 
 #custom-updates {
     color: @soft-green;
+}
+
+#custom-updates.error {
+    color: @soft-red;
 }

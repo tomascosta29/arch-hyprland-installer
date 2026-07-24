@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 import json
 import os
-import re
 import shutil
 import subprocess
-import threading
 import time
 
 import gi
@@ -15,11 +13,13 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Adw, Gdk, GdkPixbuf, GLib, Gtk
 
 try:
+    from .backends.paths import DEFAULT_SCREENSHOT_SETTING, screenshot_directory
     from .dispatch import dispatch_to_main
 except ImportError:
+    from backends.paths import DEFAULT_SCREENSHOT_SETTING, screenshot_directory
     from dispatch import dispatch_to_main
 
-SCREENSHOTS_DIR = os.path.expanduser("~/Pictures/Screenshots")
+SCREENSHOTS_DIR = screenshot_directory()
 
 REQUIRED_DEPS = {
     "grim": "grim",
@@ -40,7 +40,7 @@ def check_dependencies():
 def load_config():
     config_file = os.path.expanduser("~/.config/blinker/settings.json")
     default_config = {
-        "screenshot_dir": "~/Pictures/Screenshots",
+        "screenshot_dir": DEFAULT_SCREENSHOT_SETTING,
         "naming_pattern": "Screenshot_%Y%m%d_%H%M%S",
         "copy_to_clipboard": True,
         "show_notification": True,
@@ -55,7 +55,7 @@ def load_config():
 
 def get_recent_screenshots(count=4):
     config = load_config()
-    screenshot_dir = os.path.expanduser(config.get("screenshot_dir", SCREENSHOTS_DIR))
+    screenshot_dir = screenshot_directory(config.get("screenshot_dir"))
     if not os.path.exists(screenshot_dir):
         return []
     files = [
@@ -89,6 +89,7 @@ class BlinkerLauncher(Adw.ApplicationWindow):
         self.connect("notify::is-active", self.on_is_active_changed)
 
         self.capturing = False
+        self.jobs = app.jobs
         self.selected_index = 0
         self.capture_rows = []
 
@@ -285,14 +286,24 @@ class BlinkerLauncher(Adw.ApplicationWindow):
 
     def copy_image(self, path):
         if os.path.exists(path):
-            mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
-            with open(path, "rb") as image_file:
-                subprocess.run(
-                    ["wl-copy", "-t", mime],
-                    stdin=image_file,
-                    check=False,
-                )
-            self.show_toast("Copied to clipboard")
+            self.jobs.submit(
+                "blinker-copy",
+                self._copy_image,
+                path,
+                on_success=lambda _result: self.show_toast("Copied to clipboard"),
+                on_error=lambda error: self.show_toast(f"Copy failed: {error}"),
+            )
+
+    @staticmethod
+    def _copy_image(path):
+        mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
+        with open(path, "rb") as image_file:
+            subprocess.run(
+                ["wl-copy", "-t", mime],
+                stdin=image_file,
+                timeout=5,
+                check=True,
+            )
 
     def open_manager(self):
         subprocess.Popen([os.path.expanduser("~/.local/bin/costa-utils"), "--blinker-manager"])
@@ -311,7 +322,7 @@ class BlinkerLauncher(Adw.ApplicationWindow):
             time.sleep(0.25)
 
             config = load_config()
-            dir_path = os.path.expanduser(config.get("screenshot_dir", SCREENSHOTS_DIR))
+            dir_path = screenshot_directory(config.get("screenshot_dir"))
             os.makedirs(dir_path, exist_ok=True)
 
             naming_pattern = config.get("naming_pattern", "Screenshot_%Y%m%d_%H%M%S")
@@ -340,16 +351,48 @@ class BlinkerLauncher(Adw.ApplicationWindow):
                     return
             elif mode == "window":
                 try:
-                    hypr_out = subprocess.check_output(["hyprctl", "activewindow"], text=True)
-                    at_match = re.search(r"at:\s*(\d+),\s*(\d+)", hypr_out)
-                    size_match = re.search(r"size:\s*(\d+),\s*(\d+)", hypr_out)
-                    if at_match and size_match:
-                        geometry = f"{at_match.group(1)},{at_match.group(2)} {size_match.group(1)}x{size_match.group(2)}"
-                        cmd = ["grim", "-g", geometry, filename]
-                    else:
-                        cmd = ["grim", filename]
-                except Exception:
-                    cmd = ["grim", filename]
+                    hypr_raw = subprocess.check_output(
+                        ["hyprctl", "-j", "activewindow"],
+                        text=True,
+                    )
+                    window = json.loads(hypr_raw)
+                    at = window.get("at")
+                    size = window.get("size")
+                    if (
+                        not isinstance(at, list)
+                        or not isinstance(size, list)
+                        or len(at) != 2
+                        or len(size) != 2
+                    ):
+                        GLib.idle_add(
+                            self.on_capture_done,
+                            False,
+                            "No active window geometry",
+                        )
+                        return
+                    x, y = int(at[0]), int(at[1])
+                    width, height = int(size[0]), int(size[1])
+                    if width <= 0 or height <= 0:
+                        GLib.idle_add(
+                            self.on_capture_done,
+                            False,
+                            "Invalid active window size",
+                        )
+                        return
+                    geometry = f"{x},{y} {width}x{height}"
+                    cmd = ["grim", "-g", geometry, filename]
+                except (
+                    subprocess.CalledProcessError,
+                    json.JSONDecodeError,
+                    TypeError,
+                    ValueError,
+                ) as e:
+                    GLib.idle_add(
+                        self.on_capture_done,
+                        False,
+                        f"Window capture failed: {e}",
+                    )
+                    return
 
             # Execute grim
             try:
@@ -398,7 +441,11 @@ class BlinkerLauncher(Adw.ApplicationWindow):
             except Exception as e:
                 GLib.idle_add(self.on_capture_done, False, f"Capture error: {e}")
 
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(
+            "blinker-capture",
+            worker,
+            on_error=lambda error: self.on_capture_done(False, f"Capture error: {error}"),
+        )
 
     def on_capture_done(self, success, message):
         self.capturing = False

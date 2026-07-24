@@ -13,8 +13,10 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango
 
 try:
+    from .backends.paths import DEFAULT_SCREENSHOT_SETTING, screenshot_directory
     from .dispatch import dispatch_to_main
 except ImportError:
+    from backends.paths import DEFAULT_SCREENSHOT_SETTING, screenshot_directory
     from dispatch import dispatch_to_main
 
 VERSION = "1.0.0"
@@ -23,7 +25,7 @@ PINS_FILE = os.path.join(CONFIG_DIR, "pins")
 STATE_FILE = os.path.join(CONFIG_DIR, "state.json")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "settings.json")
 DEFAULT_CONFIG = {
-    "screenshot_dir": "~/Pictures/Screenshots",
+    "screenshot_dir": DEFAULT_SCREENSHOT_SETTING,
     "naming_pattern": "Screenshot_%Y%m%d_%H%M%S",
     "copy_to_clipboard": True,
     "show_notification": True,
@@ -47,7 +49,7 @@ def save_config(config):
 
 
 def get_screenshots_dir():
-    return os.path.abspath(os.path.expanduser(load_config()["screenshot_dir"]))
+    return screenshot_directory(load_config()["screenshot_dir"])
 
 
 def unique_destination(directory, filename):
@@ -177,6 +179,7 @@ class BlinkerManagerWindow(Adw.ApplicationWindow):
         self.set_default_size(1100, 750)
 
         self.files = []
+        self.jobs = app.jobs
         self.filtered = []
         self.pinned = self.load_pins()
         self.current_file = None
@@ -191,6 +194,9 @@ class BlinkerManagerWindow(Adw.ApplicationWindow):
         self.setup_monitor()
 
         self.connect("close-request", self.on_close_request)
+
+    def show_toast(self, message):
+        self.toast_overlay.add_toast(Adw.Toast.new(message))
 
     def load_state(self):
         try:
@@ -209,7 +215,9 @@ class BlinkerManagerWindow(Adw.ApplicationWindow):
 
     def build_ui(self):
         view = Adw.ToolbarView()
-        self.set_content(view)
+        self.toast_overlay = Adw.ToastOverlay()
+        self.toast_overlay.set_child(view)
+        self.set_content(self.toast_overlay)
 
         # Header Bar
         # Header Bar
@@ -916,11 +924,24 @@ class BlinkerManagerWindow(Adw.ApplicationWindow):
         if not selected_paths:
             return
 
+        self.jobs.submit(
+            "blinker-copy",
+            self._copy_paths,
+            selected_paths,
+            on_success=lambda _result: self.show_toast("Copied to clipboard"),
+            on_error=lambda error: self.show_toast(f"Copy failed: {error}"),
+        )
+
+    @staticmethod
+    def _copy_paths(selected_paths):
         if len(selected_paths) > 1:
             uris = [Gio.File.new_for_path(path).get_uri() for path in selected_paths]
             uri_list = "\n".join(uris)
             subprocess.run(
-                ["wl-copy", "--type", "text/uri-list"], input=uri_list.encode(), check=False
+                ["wl-copy", "--type", "text/uri-list"],
+                input=uri_list.encode(),
+                timeout=5,
+                check=True,
             )
         else:
             path = selected_paths[0]
@@ -929,7 +950,8 @@ class BlinkerManagerWindow(Adw.ApplicationWindow):
                 subprocess.run(
                     ["wl-copy", "--type", mime],
                     stdin=image_file,
-                    check=False,
+                    timeout=5,
+                    check=True,
                 )
 
     def on_ocr_clicked(self, _):
@@ -937,18 +959,30 @@ class BlinkerManagerWindow(Adw.ApplicationWindow):
             return
 
         def run_ocr():
-            try:
-                proc = subprocess.run(
-                    ["tesseract", self.current_file, "stdout"], capture_output=True, text=True
+            proc = subprocess.run(
+                ["tesseract", self.current_file, "stdout"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=True,
+            )
+            if proc.stdout.strip():
+                subprocess.run(
+                    ["wl-copy"],
+                    input=proc.stdout.encode(),
+                    timeout=5,
+                    check=True,
                 )
-                if proc.stdout.strip():
-                    subprocess.run(["wl-copy"], input=proc.stdout.encode())
-            except Exception:
-                pass
+            return bool(proc.stdout.strip())
 
-        import threading
-
-        threading.Thread(target=run_ocr).start()
+        self.jobs.submit(
+            "blinker-ocr",
+            run_ocr,
+            on_success=lambda copied: self.show_toast(
+                "OCR text copied" if copied else "OCR found no text"
+            ),
+            on_error=lambda error: self.show_toast(f"OCR failed: {error}"),
+        )
 
     def on_edit_clicked(self, _):
         if self.current_file:

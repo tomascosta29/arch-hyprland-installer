@@ -3,6 +3,7 @@ import json
 import os
 import re
 import subprocess
+from collections import OrderedDict
 
 import gi
 
@@ -18,6 +19,9 @@ except ImportError:
     from dispatch import dispatch_to_main
 
 VERSION = "1.0.0"
+MAX_DATA_CACHE_BYTES = 32 * 1024 * 1024
+MAX_DATA_CACHE_ENTRIES = 64
+MAX_THUMB_CACHE_ENTRIES = 48
 STATE_DIR = os.path.join(
     os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
     "costa-utils",
@@ -56,8 +60,10 @@ class ClipWindow(Adw.ApplicationWindow):
         self.filtered = []
         self.pinned = self.load_pins()
         self.current_line = None
-        self.thumb_cache = {}
-        self.data_cache = {}
+        self.jobs = app.jobs
+        self.thumb_cache = OrderedDict()
+        self.data_cache = OrderedDict()
+        self.data_cache_bytes = 0
         self._current_text_data = ""
 
         self.load_css()
@@ -88,6 +94,8 @@ class ClipWindow(Adw.ApplicationWindow):
         os.makedirs(STATE_DIR, exist_ok=True)
         with open(STATE_FILE, "w") as f:
             json.dump({"width": width, "height": height}, f)
+        for key in ("clipper-list", "clipper-preview", "clipper-thumbnails"):
+            self.jobs.invalidate(key)
         self.hide()
         return True
 
@@ -436,8 +444,25 @@ class ClipWindow(Adw.ApplicationWindow):
             return b""
 
     def reload(self):
-        raw = self.run_cliphist(["list"]).decode("utf-8", "replace")
+        self.jobs.submit(
+            "clipper-list",
+            self.run_cliphist,
+            ["list"],
+            on_success=self._finish_reload,
+            on_error=lambda _error: self.show_preview_error("Clipboard history is unavailable"),
+        )
+
+    def _finish_reload(self, data):
+        raw = data.decode("utf-8", "replace")
         self.lines = [line for line in raw.splitlines() if line.strip()]
+        live = set(self.lines)
+        for line in tuple(self.data_cache):
+            if line not in live:
+                removed = self.data_cache.pop(line)
+                self.data_cache_bytes -= len(removed)
+        for line in tuple(self.thumb_cache):
+            if line not in live:
+                self.thumb_cache.pop(line)
         self.apply_filter()
 
     def on_filter_type_changed(self, _):
@@ -475,12 +500,18 @@ class ClipWindow(Adw.ApplicationWindow):
             row = self.make_row(line, i + 1)
             self.listbox.append(row)
             if line in self.thumb_cache:
+                self.thumb_cache.move_to_end(line)
                 if self.thumb_cache[line]:
                     row._thumb.set_from_paintable(self.thumb_cache[line])
-            else:
+            elif "[[ binary data" in line:
                 rows_to_load.append(line)
         if rows_to_load:
-            GLib.idle_add(self.load_thumbs_idle, rows_to_load)
+            self.jobs.submit(
+                "clipper-thumbnails",
+                self._decode_batch,
+                rows_to_load[:24],
+                on_success=self._apply_thumbnail_batch,
+            )
 
     def make_row(self, line, index):
         row = Gtk.ListBoxRow()
@@ -564,8 +595,7 @@ class ClipWindow(Adw.ApplicationWindow):
     def on_drag_prepare(self, source, x, y):
         if not self.current_line:
             return None
-        data = self.decode_line(self.current_line)
-        texture = self.try_make_texture(data)
+        texture = self.thumb_cache.get(self.current_line)
         if not texture:
             return None
         return Gdk.ContentProvider.new_for_value(texture)
@@ -593,14 +623,50 @@ class ClipWindow(Adw.ApplicationWindow):
         self._select_timeout_id = None
         if self.current_line != line:
             return False
-        data = self.decode_line(line)
-        self.show_preview_from_data(data)
+        cached = self.cached_data(line)
+        if cached is not None:
+            if clipboard_mime_type(cached).startswith("image/"):
+                self.jobs.submit(
+                    "clipper-preview",
+                    self._prepare_preview,
+                    line,
+                    cached,
+                    on_success=lambda result: self._finish_preview(line, result),
+                    on_error=lambda _error: self.show_preview_error(
+                        "Unable to decode clipboard image"
+                    ),
+                )
+            else:
+                self.show_preview_from_data(cached)
+            return False
+        self.preview_stack.set_visible_child_name("empty")
+        self.preview_label.set_label("Loading preview…")
+        self.jobs.submit(
+            "clipper-preview",
+            self._prepare_preview,
+            line,
+            None,
+            on_success=lambda result: self._finish_preview(line, result),
+            on_error=lambda _error: self.show_preview_error("Unable to decode clipboard item"),
+        )
         return False
+
+    def _prepare_preview(self, line, data=None):
+        data = data if data is not None else self.run_cliphist(["decode"], input_text=line)
+        pixbuf = self.make_pixbuf(data, 900, 600)
+        return data, pixbuf
+
+    def _finish_preview(self, line, result):
+        if self.current_line != line:
+            return
+        data, pixbuf = result
+        self.cache_data(line, data)
+        self.show_preview_from_data(data, pixbuf)
 
     def on_info_toggled(self, btn):
         self.info_pill.set_visible(btn.get_active())
 
-    def show_preview_from_data(self, data):
+    def show_preview_from_data(self, data, pixbuf=None):
         if not data:
             self.show_preview_error("No data available")
             self.open_link_btn.set_visible(False)
@@ -613,7 +679,7 @@ class ClipWindow(Adw.ApplicationWindow):
         size_str = self._format_size(len(data))
         self.metadata_size.set_label(size_str)
 
-        texture = self.try_make_texture(data)
+        texture = Gdk.Texture.new_for_pixbuf(pixbuf) if pixbuf is not None else None
         if texture:
             self.preview_image.set_paintable(texture)
             self.preview_stack.set_visible_child_name("image")
@@ -688,7 +754,7 @@ class ClipWindow(Adw.ApplicationWindow):
         path = os.path.expanduser(self._current_text_data.strip())
         if os.path.isfile(path):
             path = os.path.dirname(path)
-        subprocess.run(["xdg-open", path], check=False)
+        subprocess.Popen(["xdg-open", path])
 
     def on_wipe_clicked(self, *args):
         dialog = Gtk.AlertDialog(
@@ -700,19 +766,22 @@ class ClipWindow(Adw.ApplicationWindow):
 
     def on_wipe_confirmed(self, dialog, result):
         if dialog.choose_finish(result) == 1:
-            for line in self.lines:
-                line_id = line.split("\t", 1)[0]
-                if line_id not in self.pinned:
-                    self.run_cliphist(["delete"], input_text=line)
-            self.data_cache.clear()
-            self.thumb_cache.clear()
-            self.reload()
+            lines = [line for line in self.lines if line.split("\t", 1)[0] not in self.pinned]
+            self.jobs.submit(
+                "clipper-delete",
+                self._delete_lines,
+                lines,
+                on_success=lambda _result: self._after_delete(),
+                on_error=lambda _error: self.show_preview_error(
+                    "Unable to clear clipboard history"
+                ),
+            )
 
     def on_open_link_clicked(self, _):
         url = self._current_text_data.strip()
         if url.startswith("www."):
             url = "http://" + url
-        subprocess.run(["xdg-open", url], check=False)
+        subprocess.Popen(["xdg-open", url])
 
     def on_pin_clicked(self, _):
         selected = self.listbox.get_selected_rows()
@@ -755,14 +824,24 @@ class ClipWindow(Adw.ApplicationWindow):
         if self.edit_btn.get_active():
             buf = self.preview_text.get_buffer()
             text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), True)
-            subprocess.run(["wl-copy"], input=text.encode("utf-8"), check=False)
-        else:
-            data = self.decode_line(self.current_line)
-            subprocess.run(
-                ["wl-copy", "--type", clipboard_mime_type(data)],
-                input=data,
-                check=False,
+            self.jobs.submit(
+                "clipper-copy",
+                self._copy_text,
+                text,
+                on_success=lambda _result: self.close() if close else None,
+                on_error=lambda _error: self.show_preview_error("Unable to copy text"),
             )
+            return
+        else:
+            line = self.current_line
+            self.jobs.submit(
+                "clipper-copy",
+                self._decode_and_copy,
+                line,
+                on_success=lambda _result: self.close() if close else None,
+                on_error=lambda _error: self.show_preview_error("Unable to copy clipboard item"),
+            )
+            return
         if close:
             self.close()
 
@@ -773,13 +852,20 @@ class ClipWindow(Adw.ApplicationWindow):
 
         # Batch delete
         if len(selected) > 1:
+            lines = []
             for row in selected:
                 line_id = row._clip_line.split("\t", 1)[0]
                 if line_id in self.pinned:
                     self.pinned.remove(line_id)
-                self.run_cliphist(["delete"], input_text=row._clip_line)
+                lines.append(row._clip_line)
             self.save_pins()
-            self.reload()
+            self.jobs.submit(
+                "clipper-delete",
+                self._delete_lines,
+                lines,
+                on_success=lambda _result: self._after_delete(),
+                on_error=lambda _error: self.show_preview_error("Unable to delete clipboard items"),
+            )
             return
 
         # Single delete
@@ -789,22 +875,63 @@ class ClipWindow(Adw.ApplicationWindow):
         if line_id in self.pinned:
             self.pinned.remove(line_id)
             self.save_pins()
-        self.run_cliphist(["delete"], input_text=self.current_line)
+        line = self.current_line
         self.current_line = None
+        self.jobs.submit(
+            "clipper-delete",
+            self._delete_lines,
+            [line],
+            on_success=lambda _result: self._after_delete(),
+            on_error=lambda _error: self.show_preview_error("Unable to delete clipboard item"),
+        )
+
+    @staticmethod
+    def _copy_text(text):
+        subprocess.run(
+            ["wl-copy"],
+            input=text.encode("utf-8"),
+            check=True,
+            timeout=5,
+        )
+
+    def _delete_lines(self, lines):
+        for line in lines:
+            self.run_cliphist(["delete"], input_text=line)
+
+    def _after_delete(self):
+        self.data_cache.clear()
+        self.data_cache_bytes = 0
+        self.thumb_cache.clear()
         self.reload()
 
-    def load_thumbs_idle(self, lines):
-        if not lines:
-            return False
-        line = lines.pop(0)
-        data = self.decode_line(line)
-        if data:
-            self.update_row_thumb_from_data(line, data)
-        return len(lines) > 0
+    def _decode_and_copy(self, line):
+        data = self.run_cliphist(["decode"], input_text=line)
+        subprocess.run(
+            ["wl-copy", "--type", clipboard_mime_type(data)],
+            input=data,
+            check=True,
+            timeout=5,
+        )
 
-    def update_row_thumb_from_data(self, line, data):
-        texture = self.try_make_texture(data)
+    def _decode_batch(self, lines):
+        decoded = []
+        for line in lines:
+            data = self.run_cliphist(["decode"], input_text=line)
+            decoded.append((line, data, self.make_pixbuf(data, 48, 48)))
+        return decoded
+
+    def _apply_thumbnail_batch(self, decoded):
+        for line, data, pixbuf in decoded:
+            if data:
+                self.cache_data(line, data)
+                self.update_row_thumb_from_data(line, pixbuf)
+
+    def update_row_thumb_from_data(self, line, pixbuf):
+        texture = Gdk.Texture.new_for_pixbuf(pixbuf) if pixbuf is not None else None
         self.thumb_cache[line] = texture
+        self.thumb_cache.move_to_end(line)
+        while len(self.thumb_cache) > MAX_THUMB_CACHE_ENTRIES:
+            self.thumb_cache.popitem(last=False)
         if not texture:
             return
         row = self.listbox.get_first_child()
@@ -814,23 +941,45 @@ class ClipWindow(Adw.ApplicationWindow):
                 break
             row = row.get_next_sibling()
 
-    def decode_line(self, line):
-        if line in self.data_cache:
-            return self.data_cache[line]
-        data = self.run_cliphist(["decode"], input_text=line)
-        if data:
-            self.data_cache[line] = data
+    def cached_data(self, line):
+        data = self.data_cache.get(line)
+        if data is not None:
+            self.data_cache.move_to_end(line)
         return data
 
-    def try_make_texture(self, data):
-        if not (data.startswith(b"\x89PNG") or data.startswith(b"\xff\xd8")):
+    def cache_data(self, line, data):
+        if not data or len(data) > MAX_DATA_CACHE_BYTES:
+            return
+        previous = self.data_cache.pop(line, None)
+        if previous is not None:
+            self.data_cache_bytes -= len(previous)
+        self.data_cache[line] = data
+        self.data_cache_bytes += len(data)
+        while (
+            len(self.data_cache) > MAX_DATA_CACHE_ENTRIES
+            or self.data_cache_bytes > MAX_DATA_CACHE_BYTES
+        ):
+            _old_line, old_data = self.data_cache.popitem(last=False)
+            self.data_cache_bytes -= len(old_data)
+
+    @staticmethod
+    def make_pixbuf(data, max_width, max_height):
+        if not clipboard_mime_type(data).startswith("image/"):
             return None
         try:
             loader = GdkPixbuf.PixbufLoader()
+
+            def size_prepared(prepared_loader, width, height):
+                scale = min(max_width / width, max_height / height, 1)
+                prepared_loader.set_size(
+                    max(1, round(width * scale)),
+                    max(1, round(height * scale)),
+                )
+
+            loader.connect("size-prepared", size_prepared)
             loader.write(data)
             loader.close()
-            pix = loader.get_pixbuf()
-            return Gdk.Texture.new_for_pixbuf(pix) if pix else None
+            return loader.get_pixbuf()
         except Exception:
             return None
 

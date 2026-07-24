@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Switch monitor profiles in both current Lua and legacy Hyprland formats.
+# Switch the active Hyprland Lua monitor profile.
 
 set -Eeuo pipefail
 
@@ -62,14 +62,9 @@ case "${MODE}" in
         ;;
 esac
 
-[[ -f "${MONITORS_DIR}/monitors-${PROFILE}.conf" ]] ||
-    die "Missing legacy monitor profile '${PROFILE}'."
 [[ -f "${MONITORS_DIR}/monitors-${PROFILE}.lua" ]] ||
     die "Missing Lua monitor profile '${PROFILE}'."
 
-atomic_write "${CONFIG_DIR}/monitors.conf" \
-    "# Active Monitor Profile: ${PROFILE}
-source = ~/.config/hypr/monitors/monitors-${PROFILE}.conf"
 atomic_write "${CONFIG_DIR}/monitors.lua" \
     "-- Active Monitor Profile: ${PROFILE}
 require(\"monitors.monitors-${PROFILE}\")"

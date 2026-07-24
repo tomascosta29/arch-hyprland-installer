@@ -2,6 +2,7 @@
 {
     "include": [
         "~/.config/waybar/modules",
+        "~/.config/waybar/profile.jsonc",
         "~/.config/waybar/user.jsonc"
     ],
     "layer": "top",
@@ -38,27 +39,5 @@
         "group/usage",
         "tray",
         "custom/power"
-    ],
-
-    "group/usage": {
-        "orientation": "horizontal",
-        "drawer": {
-            "transition-duration": 500,
-            "transition-left-to-right": false
-        },
-        "modules": [
-            "custom/system",
-            "cpu",
-            "custom/sep",
-            "memory",
-            "custom/sep",
-            "custom/gpu",
-            "custom/sep",
-            "custom/vram",
-            "custom/sep",
-            "disk",
-            "custom/sep",
-            "temperature"
-        ]
-    }
+    ]
 }

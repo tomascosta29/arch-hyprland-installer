@@ -7,25 +7,97 @@ readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
 readonly DATA_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}"
 readonly BIN_DIR="${HOME}/.local/bin"
+readonly STATE_DIR="${CONFIG_DIR}/costa"
+readonly MANIFEST_FILE="${STATE_DIR}/managed-files"
 readonly THEME="${1:-fcosta}"
-readonly CONFIG_COMPONENTS=(dunst hypr kitty rofi scripts themes waybar)
+readonly RELOAD_DESKTOP="${COSTA_DEPLOY_RELOAD:-1}"
+readonly CONFIG_COMPONENTS=(dunst hypr kitty rofi scripts systemd themes waybar)
+readonly RETIRED_CONFIG_FILES=(
+    hypr/current_colors.conf
+    hypr/hyprland.conf
+    hypr/input.conf
+    hypr/monitors.conf
+    hypr/monitors/monitors-dual-host.conf
+    hypr/monitors/monitors-single.conf
+    themes/catppuccin-macchiato/colors.conf
+    themes/fcosta/colors.conf
+    themes/tokyo-night/colors.conf
+)
 
 die() {
     printf 'Error: %s\n' "$1" >&2
     exit 1
 }
 
+append_tree_manifest() {
+    local kind=$1 source_root=$2 destination_prefix=$3 source relative
+
+    while IFS= read -r -d '' source; do
+        relative="${source#"${source_root}/"}"
+        [[ "${relative}" != */__pycache__/* && "${relative}" != *.pyc ]] || continue
+        printf '%s\t%s/%s\n' "${kind}" "${destination_prefix}" "${relative}" \
+            >> "${NEW_MANIFEST}"
+    done < <(find "${source_root}" \( -type f -o -type l \) -print0)
+}
+
+remove_previous_manifest() {
+    local kind relative root target
+
+    [[ -f "${MANIFEST_FILE}" ]] || return 0
+    while IFS=$'\t' read -r kind relative; do
+        [[ -n "${relative}" && "${relative}" != /* ]] || continue
+        [[ "/${relative}/" != *"/../"* ]] || continue
+        case "${kind}" in
+            CONFIG) root="${CONFIG_DIR}" ;;
+            DATA) root="${DATA_DIR}" ;;
+            BIN) root="${BIN_DIR}" ;;
+            *) continue ;;
+        esac
+        target="${root}/${relative}"
+        [[ -f "${target}" || -L "${target}" ]] && rm -f -- "${target}"
+    done < "${MANIFEST_FILE}"
+}
+
 ((EUID != 0)) || die "Run this command as the target desktop user, not root."
 [[ "${THEME}" =~ ^[A-Za-z0-9._-]+$ ]] ||
     die "Theme name contains unsupported characters."
+[[ "${RELOAD_DESKTOP}" == 0 || "${RELOAD_DESKTOP}" == 1 ]] ||
+    die "COSTA_DEPLOY_RELOAD must be 0 or 1."
 [[ -d "${REPOSITORY_ROOT}/dotfiles/themes/${THEME}" ]] ||
     die "Theme '${THEME}' does not exist."
+
+# Stop the old singleton before replacing code it has imported.
+if [[ "${RELOAD_DESKTOP}" == 1 && -x "${BIN_DIR}/costa-utils" ]]; then
+    "${BIN_DIR}/costa-utils" --shutdown >/dev/null 2>&1 || true
+fi
+
+mkdir -p "${STATE_DIR}"
+NEW_MANIFEST="$(mktemp "${STATE_DIR}/.managed-files.XXXXXX")"
+trap 'rm -f "${NEW_MANIFEST}"' EXIT
+for component in "${CONFIG_COMPONENTS[@]}"; do
+    append_tree_manifest CONFIG \
+        "${REPOSITORY_ROOT}/dotfiles/${component}" "${component}"
+done
+printf 'CONFIG\tmimeapps.list\n' >> "${NEW_MANIFEST}"
+append_tree_manifest DATA "${REPOSITORY_ROOT}/dotfiles/costa-utils" "costa-utils"
+printf '%s\n' \
+    'DATA	applications/org.fcosta.CostaUtils.desktop' \
+    'DATA	icons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg' \
+    'BIN	costa-utils' >> "${NEW_MANIFEST}"
+
+# Remove only paths recorded by an earlier deployment. Files created by the
+# user outside that ownership manifest are never considered stale.
+remove_previous_manifest
 
 for component in "${CONFIG_COMPONENTS[@]}"; do
     source_dir="${REPOSITORY_ROOT}/dotfiles/${component}"
     [[ -d "${source_dir}" ]] || die "Missing dotfile component '${component}'."
     mkdir -p "${CONFIG_DIR}/${component}"
     cp -a "${source_dir}/." "${CONFIG_DIR}/${component}/"
+done
+
+for retired_file in "${RETIRED_CONFIG_FILES[@]}"; do
+    rm -f "${CONFIG_DIR}/${retired_file}"
 done
 
 mkdir -p \
@@ -35,25 +107,62 @@ mkdir -p \
     "${DATA_DIR}/costa-utils"
 cp -a "${REPOSITORY_ROOT}/dotfiles/costa-utils/." \
     "${DATA_DIR}/costa-utils/"
+find "${DATA_DIR}/costa-utils" -type d -name __pycache__ -prune \
+    -exec rm -rf -- {} +
 ln -sfn "../share/costa-utils/costa_utils.py" "${BIN_DIR}/costa-utils"
 cp -a \
     "${REPOSITORY_ROOT}/dotfiles/costa-utils/applications/org.fcosta.CostaUtils.desktop" \
     "${DATA_DIR}/applications/"
 cp -a "${REPOSITORY_ROOT}/dotfiles/costa-utils/icons/costa_utils.svg" \
     "${DATA_DIR}/icons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg"
+cp -a "${REPOSITORY_ROOT}/dotfiles/mimeapps.list" "${CONFIG_DIR}/mimeapps.list"
 
 find "${CONFIG_DIR}/scripts" -type f -exec chmod 0755 {} +
 chmod 0755 \
     "${DATA_DIR}/costa-utils/costa_utils.py" \
     "${DATA_DIR}/costa-utils/uninstall.sh"
+chmod 0644 "${NEW_MANIFEST}"
+mv -f "${NEW_MANIFEST}" "${MANIFEST_FILE}"
+trap - EXIT
 
-"${CONFIG_DIR}/scripts/theme-select" "${THEME}"
+if [[ "${RELOAD_DESKTOP}" == 1 ]] && pgrep -x Hyprland >/dev/null; then
+    dbus-update-activation-environment --systemd \
+        WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE
+fi
+if [[ "${RELOAD_DESKTOP}" == 1 ]]; then
+    systemctl --user daemon-reload
+fi
+
+if [[ -f "${STATE_DIR}/install-profile" ]]; then
+    INSTALL_PROFILE="$(<"${STATE_DIR}/install-profile")"
+elif command -v systemd-detect-virt >/dev/null 2>&1 &&
+    systemd-detect-virt --vm --quiet; then
+    INSTALL_PROFILE=vm
+else
+    INSTALL_PROFILE=bare-metal
+fi
+COSTA_WAYBAR_RELOAD="${RELOAD_DESKTOP}" \
+    "${CONFIG_DIR}/scripts/waybar-profile" "${INSTALL_PROFILE}"
+
+# Migrate a currently running pre-systemd session without waiting for logout.
+if [[ "${RELOAD_DESKTOP}" == 1 ]] && pgrep -x Hyprland >/dev/null; then
+    if systemctl --user cat hyprland-session.target >/dev/null 2>&1 &&
+        ! systemctl --user is-active --quiet hyprland-session.target; then
+        for legacy_process in \
+            dunst hypridle hyprpaper hyprsunset spice-vdagent waybar; do
+            pkill -x "${legacy_process}" >/dev/null 2>&1 || true
+        done
+        pkill -f -- \
+            'wl-paste --type (text|image) --watch (/.*/)?cliphist store' \
+            >/dev/null 2>&1 || true
+        systemctl --user start hyprland-session.target
+    fi
+fi
+
+COSTA_THEME_RELOAD="${RELOAD_DESKTOP}" \
+    "${CONFIG_DIR}/scripts/theme-select" "${THEME}"
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "${DATA_DIR}/applications"
 fi
-
-# Existing windows keep old Python modules in memory, so restart the suite.
-pkill -f "${BIN_DIR}/costa-utils" >/dev/null 2>&1 || true
-pkill -f "${DATA_DIR}/costa-utils/costa_utils.py" >/dev/null 2>&1 || true
 
 printf "User configuration deployed with theme '%s'.\n" "${THEME}"

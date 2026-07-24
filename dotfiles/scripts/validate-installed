@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# Validate the installed workstation from inside the target system.
+
+set -Eeuo pipefail
+
+readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
+readonly DATA_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}"
+FAILURES=0
+
+pass() {
+    printf 'PASS  %s\n' "$1"
+}
+
+fail() {
+    printf 'FAIL  %s\n' "$1" >&2
+    FAILURES=$((FAILURES + 1))
+}
+
+check() {
+    local description=$1
+    shift
+    if "$@" >/dev/null 2>&1; then
+        pass "${description}"
+    else
+        fail "${description}"
+    fi
+}
+
+PROFILE="${1:-}"
+USER_RUNTIME_DIR="/run/user/$(id -u)"
+if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" &&
+    -S "${USER_RUNTIME_DIR}/bus" ]]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=${USER_RUNTIME_DIR}/bus"
+fi
+if [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" &&
+    -d "${USER_RUNTIME_DIR}/hypr" ]]; then
+    while IFS= read -r socket_dir; do
+        export HYPRLAND_INSTANCE_SIGNATURE="${socket_dir##*/}"
+        break
+    done < <(find "${USER_RUNTIME_DIR}/hypr" -mindepth 1 -maxdepth 1 -type d)
+fi
+
+if [[ -z "${PROFILE}" && -f "${CONFIG_DIR}/costa/install-profile" ]]; then
+    PROFILE="$(<"${CONFIG_DIR}/costa/install-profile")"
+fi
+if [[ -z "${PROFILE}" ]] && systemd-detect-virt --vm --quiet; then
+    PROFILE=vm
+fi
+PROFILE="${PROFILE:-bare-metal}"
+
+for package in \
+    base linux grub networkmanager firewalld bluez pipewire wireplumber \
+    hyprland waybar kitty dunst sddm gnome-keyring cliphist; do
+    check "package ${package}" pacman -Q "${package}"
+done
+
+case "${PROFILE}" in
+    vm)
+        check "VM guest agent package" pacman -Q qemu-guest-agent
+        check "SPICE guest package" pacman -Q spice-vdagent
+        ;;
+    bare-metal)
+        check "firmware update package" pacman -Q fwupd
+        check "SMART tools package" pacman -Q smartmontools
+        check "NVMe tools package" pacman -Q nvme-cli
+        ;;
+    *) fail "known install profile (${PROFILE})" ;;
+esac
+
+for unit in NetworkManager.service firewalld.service bluetooth.service sddm.service; do
+    check "${unit} enabled" systemctl is-enabled "${unit}"
+done
+if [[ "${PROFILE}" == vm ]]; then
+    check "qemu-guest-agent enabled" systemctl is-enabled qemu-guest-agent.service
+fi
+
+check "Costa Utils entry point" test -x "${HOME}/.local/bin/costa-utils"
+check "Costa Utils application" test -f "${DATA_DIR}/costa-utils/costa_utils.py"
+check "Hyprland Lua config" test -f "${CONFIG_DIR}/hypr/hyprland.lua"
+check "transactional theme pointer" test -L "${CONFIG_DIR}/costa/current-theme"
+check "Waybar profile state" grep -Fxq "${PROFILE}" "${CONFIG_DIR}/costa/install-profile"
+
+if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+    check "Hyprland session target active" \
+        systemctl --user is-active hyprland-session.target
+    for unit in waybar.service dunst.service hyprpaper.service cliphist-text.service; do
+        check "${unit} active" systemctl --user is-active "${unit}"
+    done
+fi
+
+if python - "${DATA_DIR}/costa-utils" "${CONFIG_DIR}/waybar" <<'PY'
+import ast
+import json
+from pathlib import Path
+import sys
+
+app_root = Path(sys.argv[1])
+waybar_root = Path(sys.argv[2])
+for source in app_root.rglob("*.py"):
+    ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+for name in ("config.jsonc", "modules", "profile.jsonc", "user.jsonc"):
+    content = (waybar_root / name).read_text(encoding="utf-8")
+    content = "\n".join(line.split("//", 1)[0] for line in content.splitlines())
+    json.loads(content)
+PY
+then
+    pass "Python and Waybar installed syntax"
+else
+    fail "Python and Waybar installed syntax"
+fi
+
+if command -v hyprctl >/dev/null 2>&1 &&
+    [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+    config_errors="$(hyprctl configerrors 2>&1 || true)"
+    [[ -z "${config_errors}" ]] && pass "Hyprland configerrors empty" ||
+        fail "Hyprland configerrors empty: ${config_errors}"
+fi
+
+if ((FAILURES > 0)); then
+    printf '\n%d installed-system check(s) failed.\n' "${FAILURES}" >&2
+    exit 1
+fi
+printf '\nInstalled ${PROFILE} workstation validation passed.\n'

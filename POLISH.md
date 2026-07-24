@@ -2,95 +2,56 @@
 
 Reviewed: 2026-07-24
 
+## Implementation status
+
+The substantive items from this review were implemented on 2026-07-24:
+
+- Costa Utils now owns bounded jobs plus shared audio, media, NetworkManager,
+  BlueZ, night-light, command, and path backends. Media monitoring and artwork
+  caching are shared across windows; stale keyed work is discarded.
+- Bluetooth has adapter discovery, a BlueZ `Agent1`, pair/trust/connect,
+  disconnect, cancellation, forget, bounded discovery, and property-change
+  refreshes. Wi-Fi carries BSSID/security/profile UUID state, handles open and
+  personal networks distinctly, and hands enterprise setup to `nmtui`.
+- Clipper decoding and mutations are asynchronous, preview generations are
+  guarded, caches are byte/entry-bounded LRUs, and PNG/JPEG/GIF/WebP share the
+  image decoder.
+- Audio and brightness sliders are debounced. Manual Hyprsunset state is
+  explicit instead of being inferred from the scheduled profile.
+- Runtime theme selection validates first and switches every consumer through
+  one atomic `current-theme` symlink. Supervised services, Kitty, and the Costa
+  Utils singleton are notified; SDDM is explicitly installation-time only.
+- User deployment records exact ownership, removes only stale managed files,
+  preserves unowned user files, and shuts Costa Utils down through its
+  application protocol.
+- The installer performs clock/mirror preflight before passwords or destructive
+  confirmation and discovers new partitions through `lsblk` partition numbers.
+- Waybar selects VM or bare-metal telemetry explicitly, and an installed-system
+  validator plus QEMU Guest Agent smoke harness now cover the deployed machine.
+
+The discussion below is retained as the rationale and regression checklist, not
+as a list of currently open tasks.
+
 This review deliberately excludes repository cosmetics, licensing, screenshots,
 badges, changelogs, and similar maintenance. It focuses on the behavior and
 architecture of the installer, session configuration, switchers, Waybar, SDDM,
 and Costa Utils.
 
-## Executive opinion
+## Original expert opinion
 
 The repository has moved past basic repair. The installer has sensible
 destructive-operation safeguards, the desktop stack is coherent, and the Lua
 migration is substantially correct. The remaining polish is not another round
-of formatting or small guards. It is about owning process lifecycle, removing
-duplicated sources of truth, and giving Costa Utils a real backend architecture.
+of formatting or small guards. It is about giving Costa Utils a real backend
+architecture, making stateful operations cancellable, and hardening deployment
+and installation as transactions.
 
-The three highest-leverage changes are:
+The highest-leverage remaining change is to separate Costa Utils' system
+backends from its GTK windows, with bounded and cancellable background work.
+That would address most of the remaining silent failures, races, duplicated
+code, and difficult-to-test behavior.
 
-1. manage the Hyprland session through systemd user targets and units;
-2. make Lua the only Hyprland configuration source; and
-3. separate Costa Utils' system backends from its GTK windows, with bounded and
-   cancellable background work.
-
-Those changes would address most of the current reload inconsistencies,
-silent failures, races, duplicated code, and difficult-to-test behavior.
-
-## Priority 1: own the desktop session lifecycle
-
-### The session is a collection of unsupervised child processes
-
-[`dotfiles/hypr/hyprland.lua`](dotfiles/hypr/hyprland.lua) directly starts
-Hyprpaper, Hypridle, Hyprsunset, Waybar, Dunst, Spice vdagent, and both clipboard
-watchers from the `hyprland.start` event. Only the policy agent is started as a
-systemd user service.
-
-This works when every process starts correctly and remains alive. It has weak
-behavior when anything crashes:
-
-- there is no restart policy;
-- startup failures are not surfaced;
-- there is no declared ordering after the Wayland and D-Bus environment exists;
-- theme switching has to kill and recreate Hyprpaper itself;
-- there is no matching `hyprland.shutdown` cleanup;
-- the graphical session target is never started, so other user services and
-  portals do not have a proper session lifetime to bind to.
-
-The right end state is a `hyprland-session.target` bound to
-`graphical-session.target`, plus user units for the bar, notification daemon,
-wallpaper, idle daemon, night-light daemon, and clipboard watchers. Hyprland
-should import its environment and start the target once. Theme switching should
-reload or restart those units instead of managing arbitrary processes.
-
-This is also the right place to decide whether GNOME Keyring is real or dead
-weight. The installer includes `gnome-keyring`, but it does not configure PAM
-unlocking or explicitly start the secrets component. Either integrate it into
-the login/session lifecycle or remove it.
-
-Hyprland's current documentation recommends this target-based approach for
-services that belong to the graphical session:
-<https://wiki.hypr.land/Useful-Utilities/Systemd-start/>.
-
-### The exit path should use the compositor's supported shutdown mechanism
-
-The Lua configuration binds `SUPER+SHIFT+M` to `hl.dsp.exit()`. Current
-Hyprland documentation recommends `hyprshutdown` instead of the raw exit
-dispatcher. A managed session target makes this especially important because
-shutdown should stop the session graph cleanly rather than merely terminate the
-compositor.
-
-## Priority 2: stop maintaining two Hyprland implementations
-
-The repository declares Hyprland 0.55 or newer as supported, yet every major
-configuration mutation still maintains both Lua and legacy Hyprlang:
-
-- `hyprland.lua` and `hyprland.conf`;
-- `current_colors.lua` and `current_colors.conf`;
-- `input.lua` and `input.conf`;
-- `monitors.lua` and `monitors.conf`;
-- Lua and Hyprlang copies of every monitor profile;
-- dual writes in `theme-select`, `monitor-select`, and `desktop-settings`.
-
-They are already semantically different. The Lua dual-monitor profile enables
-VRR and persistent workspaces; the legacy profile does not. The Lua config sets
-cursor sizes and compositor miscellaneous options that the legacy config omits.
-Every future keybinding or rule change has to be translated manually.
-
-If 0.55+ is the real support boundary, remove the legacy path. If an old VM
-must remain supported, generate the legacy files from one declarative data
-source instead of editing both by hand. Keeping two handwritten implementations
-is the largest source of avoidable configuration drift in the repository.
-
-## Priority 3: give Costa Utils a backend and job model
+## Priority 1: give Costa Utils a backend and job model
 
 Costa Utils is a long-lived singleton process containing roughly 5,800 lines of
 module code. Its windows currently own subprocess execution, D-Bus calls,
@@ -270,8 +231,7 @@ helper rather than a usually skipped write.
 
 ### `deploy-user` is not equivalent to the user portion of installation
 
-The installer deploys `mimeapps.list`; `scripts/deploy-user` does not. The
-deployer also overlays directories with `cp -a`, leaving files that were removed
+The deployer overlays directories with `cp -a`, leaving files that were removed
 from the repository in the live configuration. It then kills Costa Utils using
 two process-pattern matches without a protocol-level shutdown.
 
@@ -291,44 +251,21 @@ After partitioning, query `lsblk` for the child partitions and identify them by
 partition number/type or label. This also lets the installer verify that exactly
 the intended EFI and root partitions appeared before formatting.
 
-The package/configuration phase also installs `os-prober` and enables
-`GRUB_DISABLE_OS_PROBER=false` even though the installer explicitly destroys the
-selected disk and declares no dual-boot support. Remove that integration unless
-detecting operating systems on other attached disks is an intentional feature.
+`os-prober` is intentional: the supported bare-metal layout may keep Windows on
+a separate physical disk while dedicating the selected disk to Arch. Testing
+should cover discovery of that untouched Windows EFI installation as well as
+the single-disk VM case.
 
 Finally, add preflight checks for repository/network reachability and clock
 health before the partition table is replaced. A `pacstrap` failure is safe in
 the data-integrity sense, but discovering network or time problems after wiping
 the disk is poor installation behavior.
 
-### The SDDM clock is static
-
-[`dotfiles/sddm/costa/Main.qml`](dotfiles/sddm/costa/Main.qml) binds its time and
-date text directly to `new Date()` but has no `Timer` or changing property. QML
-evaluates those bindings at creation, so the greeter clock does not advance.
-Use a minute-aligned timer that updates a shared date property.
-
-The fixed 1920×1080 root declaration should also be tested on the VM's dynamic
-SPICE resolution and on both 1440p monitors. The child layout is anchored well,
-but the root should take its size from the actual greeter view rather than
-expressing one preferred screen as the theme's geometry.
-
 ### Waybar has configuration that disagrees with its visible bar
 
-The MPRIS module and its CSS are defined but the module is not included in any
-module list. Media controls instead live inside Costa Utils. Pick one owner and
-delete the inactive implementation.
-
-The update helper emits an icon in its JSON `text`, while the Waybar custom
-module adds another icon around that text. More importantly,
-`check_updates` converts missing tools, network errors, mirror failures, and
-“no updates” into the same zero-update result. “System up to date” should only
-be displayed for the expected no-update exit status; failures need an error
-class and tooltip.
-
-The static usage drawer also exposes AMD GPU and VRAM modules in the VM, where
-they intentionally return zero. A machine/profile-aware module list would be
-cleaner than showing plausible-looking zero telemetry for nonexistent hardware.
+The static usage drawer exposes AMD GPU and VRAM modules in the VM, where they
+intentionally return zero. A machine/profile-aware module list would be cleaner
+than showing plausible-looking zero telemetry for nonexistent hardware.
 
 Waybar workspace clicking should be explicitly tested with the supported
 Hyprland Lua/Waybar combination. There is current upstream compatibility work
@@ -336,29 +273,10 @@ around the workspace module dispatching old-style commands into Lua-based
 Hyprland:
 <https://github.com/Alexays/Waybar/issues/5008>.
 
-### Runner history can retain secrets
+### Screenshot directory paths are not normalized once
 
-The Runner stores the last 50 raw shell commands in
-`~/.local/state/costa-utils/runner_history.json`. Commands commonly contain API
-tokens, URLs with credentials, or one-off passwords. The file is created using
-the process umask rather than an explicit private mode, and there is no
-history-disable or clear-history control.
-
-The shell execution itself is intentional for a runner. The polish needed is
-around secret retention: create the file as `0600`, allow private commands not
-to be recorded, and provide a clear-history action.
-
-### Screenshot window capture has multi-monitor edge cases
-
-Window capture parses the text form of `hyprctl activewindow` with expressions
-that only accept non-negative coordinates. A window on a monitor positioned to
-the left or above the origin can have negative coordinates; parsing then fails
-and silently falls back to a full-desktop screenshot.
-
-Use `hyprctl -j activewindow`, validate the geometry, and report failure instead
-of changing capture mode. Normalize the configured screenshot directory once in
-a shared backend so the launcher and manager cannot interpret relative paths
-differently.
+Normalize the configured screenshot directory once in a shared backend so the
+launcher and manager cannot interpret relative paths differently.
 
 ## Validation strategy that matches the actual risks
 
@@ -390,14 +308,67 @@ keeping a repeatable installed-guest smoke test.
 
 ## Recommended implementation order
 
-1. Introduce the graphical-session target and supervised user services.
-2. Remove the legacy Hyprland path and simplify all switchers to Lua only.
-3. Extract shared audio, MPRIS, NetworkManager, BlueZ, and command-runner
+1. Extract shared audio, MPRIS, NetworkManager, BlueZ, and command-runner
    backends.
-4. Add bounded jobs, cancellation/generations, logging, and private state-file
-   handling.
-5. Fix Bluetooth onboarding, Clipper caching/decoding, night-light state, and
-   SDDM time updates.
-6. Make theme and user deployment manifest-driven and transaction-oriented.
-7. Harden installer partition discovery and pre-wipe preflight checks.
-8. Add the installed-VM smoke test once the new service graph is stable.
+2. Add bounded jobs, cancellation/generations, and logging.
+3. Fix Bluetooth onboarding, Clipper caching/decoding, and night-light state.
+4. Make theme and user deployment manifest-driven and transaction-oriented.
+5. Harden installer partition discovery and pre-wipe preflight checks.
+6. Add the installed-VM smoke test now that the service graph is stable.
+
+---
+
+## Archived (done)
+
+Resolved on 2026-07-24. This includes both architectural work and smaller
+repairs; do not re-open an item unless its fix regresses.
+
+### Desktop session lifecycle is supervised
+
+`hyprland-session.target` now binds to `graphical-session.target`, starts XDG
+autostart, and owns the packaged Hyprpaper, Hypridle, Hyprsunset, Waybar, Dunst,
+and policy-agent services plus dedicated clipboard watcher services. Drop-ins
+bind every process to the session and give it restart-on-failure behavior.
+Hyprland imports its environment, starts the target on `hyprland.start`, and
+stops it synchronously on `hyprland.shutdown`.
+
+### Hyprland configuration is Lua-only
+
+The repository's Hyprland 0.55+ boundary is now real. The handwritten Hyprlang
+main, color, input, and monitor mirrors were removed. Theme, monitor, and
+desktop-settings scripts mutate only Lua state, and deployment removes retired
+mirrors from existing installations.
+
+### Exit path uses hyprshutdown
+
+`SUPER+SHIFT+M` now runs `hyprshutdown` (with a raw-exit fallback). The
+installer installs the `hyprshutdown` package from `extra`.
+
+### SDDM clock advances; root follows the screen
+
+`Main.qml` uses a shared `now` property with a minute-aligned `Timer`, and the
+root size binds to `Screen.width` / `Screen.height` instead of a fixed
+1920×1080 geometry.
+
+### Waybar dead MPRIS path removed; update check reports errors
+
+Unused Waybar `mpris` module/CSS deleted (Costa Utils owns media).
+`check_updates` distinguishes exit 0 (updates), exit 2 (up to date), and other
+failures (`class: error`), and no longer duplicates the module icon in JSON
+`text`.
+
+### Runner history is private by default
+
+History is written mode `0600`, leading-space commands are not recorded, and
+`Ctrl+Shift+Delete` clears history.
+
+### Window screenshots accept negative coordinates
+
+Blinker window capture uses `hyprctl -j activewindow`, validates geometry, and
+reports failure instead of silently falling back to a full-desktop shot.
+
+### `deploy-user` deploys `mimeapps.list`
+
+`scripts/deploy-user` now copies `dotfiles/mimeapps.list` into
+`~/.config/mimeapps.list`, matching the installer. Overlay sync and
+protocol-level Costa Utils restart remain open above.

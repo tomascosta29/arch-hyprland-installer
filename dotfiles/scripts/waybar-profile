@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Select hardware-appropriate Waybar modules.
+
+set -Eeuo pipefail
+
+readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
+readonly WAYBAR_DIR="${CONFIG_DIR}/waybar"
+readonly STATE_DIR="${CONFIG_DIR}/costa"
+readonly RELOAD_WAYBAR="${COSTA_WAYBAR_RELOAD:-1}"
+
+die() {
+    printf 'Error: %s\n' "$1" >&2
+    exit 1
+}
+
+if (($# != 1)); then
+    die "Usage: waybar-profile bare-metal|vm"
+fi
+
+PROFILE=$1
+case "${PROFILE}" in
+    bare-metal | vm) ;;
+    *) die "Profile must be 'bare-metal' or 'vm'." ;;
+esac
+[[ "${RELOAD_WAYBAR}" == 0 || "${RELOAD_WAYBAR}" == 1 ]] ||
+    die "COSTA_WAYBAR_RELOAD must be 0 or 1."
+
+source_file="${WAYBAR_DIR}/profile-${PROFILE}.jsonc"
+destination="${WAYBAR_DIR}/profile.jsonc"
+[[ -f "${source_file}" ]] || die "Missing Waybar profile '${source_file}'."
+
+temp_file="$(mktemp "${WAYBAR_DIR}/.profile.jsonc.XXXXXX")"
+cp "${source_file}" "${temp_file}"
+chmod 0644 "${temp_file}"
+mv -f "${temp_file}" "${destination}"
+mkdir -p "${STATE_DIR}"
+printf '%s\n' "${PROFILE}" > "${STATE_DIR}/install-profile"
+
+if [[ "${RELOAD_WAYBAR}" == 1 ]] &&
+    systemctl --user is-active --quiet waybar.service 2>/dev/null; then
+    systemctl --user try-reload-or-restart waybar.service
+fi

@@ -1,13 +1,29 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Window 2.15
 
 Rectangle {
     id: root
-    width: 1920
-    height: 1080
+    width: Screen.width
+    height: Screen.height
     color: config.backgroundFill || "#192330"
 
     property int sessionIndex: sessionModel.lastIndex
+    property date now: new Date()
+
+    Timer {
+        id: clockTimer
+        interval: 60000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            root.now = new Date()
+            // Keep ticks aligned to the wall-clock minute boundary.
+            var msIntoMinute = root.now.getSeconds() * 1000 + root.now.getMilliseconds()
+            interval = msIntoMinute === 0 ? 60000 : 60000 - msIntoMinute
+        }
+    }
 
     Image {
         id: wallpaper
@@ -32,7 +48,7 @@ Rectangle {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.formatDateTime(new Date(), "HH:mm")
+            text: Qt.formatDateTime(root.now, "HH:mm")
             color: config.foreground || "#cdcecf"
             font.family: config.fontFamily || "sans-serif"
             font.pixelSize: 64
@@ -41,7 +57,7 @@ Rectangle {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.formatDateTime(new Date(), "dddd, dd MMMM")
+            text: Qt.formatDateTime(root.now, "dddd, dd MMMM")
             color: config.foregroundDim || "#738091"
             font.family: config.fontFamily || "sans-serif"
             font.pixelSize: 18

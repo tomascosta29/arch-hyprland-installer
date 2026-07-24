@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 import os
 import subprocess
-import threading
-import urllib.request
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
+from gi.repository import Adw, Gdk, Gtk, Pango
+
+from .backends.jobs import Debouncer
 
 
 class ControlCenterWindow(Adw.ApplicationWindow):
@@ -19,9 +19,15 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         self.set_modal(True)
 
         self.updating_sliders = False
-        self.media_proc = None
-        self.adapter_path = "/org/bluez/hci0"
-        self.bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+        self.jobs = app.jobs
+        self.audio = app.audio
+        self.media = app.media
+        self.nightlight = app.nightlight
+        self.network = app.network
+        self.bluetooth = app.bluetooth
+        self.volume_debouncer = Debouncer(90, lambda value: self._set_volume(value))
+        self.brightness_debouncer = Debouncer(120, lambda value: self._set_brightness(value))
+        self.adapter_path = None
 
         self.build_ui()
         self.load_css()
@@ -43,12 +49,16 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         name = Gtk.accelerator_name(keyval, state)
         if name == "Escape":
             self.stop_media_monitor()
+            self.volume_debouncer.cancel()
+            self.brightness_debouncer.cancel()
             self.hide()
             return True
         return False
 
     def on_close_request(self, win):
         self.stop_media_monitor()
+        self.volume_debouncer.cancel()
+        self.brightness_debouncer.cancel()
         self.hide()
         return True
 
@@ -56,6 +66,8 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         is_act = self.is_active() if hasattr(self, "is_active") else self.get_property("is-active")
         if not is_act:
             self.stop_media_monitor()
+            self.volume_debouncer.cancel()
+            self.brightness_debouncer.cancel()
             self.hide()
 
     def build_ui(self):
@@ -246,142 +258,60 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         self.toast_overlay.add_toast(toast)
 
     def refresh_states(self):
-        # 1. Volume & Brightness
         def audio_bright_worker():
-            try:
-                # Volume Output
-                vol_proc = subprocess.run(
-                    ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True
-                )
-                vol_out = vol_proc.stdout.strip()
-                vol_val = 0
-                if "Volume:" in vol_out:
-                    vol_val = int(float(vol_out.split(":")[-1].strip().split(" ")[0]) * 100)
+            volume, _muted = self.audio.get_default_volume("@DEFAULT_AUDIO_SINK@")
+            bright_val = 50
+            result = subprocess.run(
+                ["brightnessctl", "--machine-readable"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                bright_val = int(result.stdout.strip().split(",")[3].rstrip("%"))
+            return volume, bright_val
 
-                # Brightness
-                bright_val = 50
-                try:
-                    res = subprocess.run(
-                        ["brightnessctl", "--machine-readable"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                    )
-                    percentage = res.stdout.strip().split(",")[3].rstrip("%")
-                    bright_val = int(percentage)
-                except (IndexError, ValueError, OSError, subprocess.SubprocessError):
-                    pass
-
-                GLib.idle_add(self.update_sliders_ui, vol_val, bright_val)
-            except Exception as e:
-                print(f"Error loading sliders: {e}")
-
-        # 2. Network SSID
-        def network_worker():
-            try:
-                from costautils.network_menu import parse_nmcli_terse
-            except ImportError:
-                from network_menu import parse_nmcli_terse
-
-            try:
-                res = subprocess.run(
-                    ["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
-                    capture_output=True,
-                    text=True,
-                    timeout=8,
-                    check=False,
-                )
-                ssid = "Disconnected"
-                active = False
-                for line in res.stdout.splitlines():
-                    fields = parse_nmcli_terse(line)
-                    if len(fields) >= 2 and fields[0] == "yes":
-                        ssid = fields[1] or "Connected"
-                        active = True
-                        break
-
-                # Check if Wi-Fi interface is powered
-                radio_res = subprocess.run(
-                    ["nmcli", "radio", "wifi"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    check=False,
-                )
-                wifi_powered = radio_res.stdout.strip() == "enabled"
-                if not wifi_powered:
-                    ssid = "Disabled"
-                    active = False
-
-                GLib.idle_add(self.update_wifi_ui, active, ssid)
-            except Exception as error:
-                GLib.idle_add(self.show_toast, f"Wi-Fi status unavailable: {error}")
-
-        # 3. Bluetooth status
-        def bluetooth_worker():
-            try:
-                reply = self.bus.call_sync(
-                    "org.bluez",
-                    "/",
-                    "org.freedesktop.DBus.ObjectManager",
-                    "GetManagedObjects",
-                    None,
-                    None,
-                    Gio.DBusCallFlags.NONE,
-                    -1,
-                    None,
-                )
-                objects = reply.unpack()[0]
-                powered = False
-                connected_count = 0
-
-                for path, interfaces in objects.items():
-                    if "org.bluez.Adapter1" in interfaces:
-                        self.adapter_path = path
-                        powered = interfaces["org.bluez.Adapter1"].get("Powered", False)
-                    if "org.bluez.Device1" in interfaces:
-                        if interfaces["org.bluez.Device1"].get("Connected", False):
-                            connected_count += 1
-
-                sub = "Disabled"
-                if powered:
-                    sub = f"{connected_count} Connected" if connected_count > 0 else "On"
-                GLib.idle_add(self.update_bluetooth_ui, powered, sub)
-            except Exception:
-                pass
-
-        # 4. Night Light & DND
         def extras_worker():
-            dnd_active = False
-            try:
-                res = subprocess.run(
-                    ["dunstctl", "is-paused"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                dnd_active = res.stdout.strip() == "true"
-            except (OSError, subprocess.SubprocessError):
-                pass
+            result = subprocess.run(
+                ["dunstctl", "is-paused"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return result.stdout.strip() == "true", self.nightlight.query()
 
-            nl_active = False
-            try:
-                res = subprocess.run(
-                    ["hyprctl", "hyprsunset", "profile"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                nl_active = res.returncode == 0 and "identity" not in res.stdout.lower()
-            except (OSError, subprocess.SubprocessError):
-                pass
+        self.jobs.submit(
+            "control-sliders-refresh",
+            audio_bright_worker,
+            on_success=lambda values: self.update_sliders_ui(*values),
+            on_error=lambda error: self.show_toast(f"Controls unavailable: {error}"),
+        )
+        self.jobs.submit(
+            "control-network-refresh",
+            self.network.active_status,
+            on_success=lambda values: self.update_wifi_ui(*values),
+            on_error=lambda error: self.show_toast(f"Wi-Fi status unavailable: {error}"),
+        )
+        self.jobs.submit(
+            "control-bluetooth-refresh",
+            self.bluetooth.query,
+            on_success=self._update_bluetooth_state,
+            on_error=lambda error: self.show_toast(f"Bluetooth unavailable: {error}"),
+        )
+        self.jobs.submit(
+            "control-extras-refresh",
+            extras_worker,
+            on_success=lambda values: self.update_extras_ui(*values),
+            on_error=lambda error: self.show_toast(f"Desktop state unavailable: {error}"),
+        )
 
-            GLib.idle_add(self.update_extras_ui, dnd_active, nl_active)
-
-        threading.Thread(target=audio_bright_worker, daemon=True).start()
-        threading.Thread(target=network_worker, daemon=True).start()
-        threading.Thread(target=bluetooth_worker, daemon=True).start()
-        threading.Thread(target=extras_worker, daemon=True).start()
+    def _update_bluetooth_state(self, state):
+        self.adapter_path = state.adapter_path
+        connected = sum(device["connected"] for device in state.devices)
+        subtitle = "Disabled"
+        if state.powered:
+            subtitle = f"{connected} Connected" if connected else "On"
+        self.update_bluetooth_ui(state.powered, subtitle)
 
     def update_sliders_ui(self, vol, bright):
         self.updating_sliders = True
@@ -426,149 +356,106 @@ class ControlCenterWindow(Adw.ApplicationWindow):
             return
         val = int(scale.get_value())
 
-        def worker():
-            try:
-                subprocess.run(
-                    ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"],
-                    stdout=subprocess.DEVNULL,
-                    timeout=5,
-                    check=False,
-                )
-            except (OSError, subprocess.SubprocessError) as error:
-                GLib.idle_add(self.show_toast, f"Volume update failed: {error}")
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.volume_debouncer.schedule(val)
 
     def on_bright_slider_changed(self, scale):
         if self.updating_sliders:
             return
         val = int(scale.get_value())
 
-        def worker():
-            try:
-                subprocess.run(
-                    ["brightnessctl", "set", f"{val}%"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=5,
-                    check=False,
-                )
-            except (OSError, subprocess.SubprocessError) as error:
-                GLib.idle_add(self.show_toast, f"Brightness unavailable: {error}")
+        self.brightness_debouncer.schedule(val)
 
-        threading.Thread(target=worker, daemon=True).start()
+    def _set_volume(self, value):
+        self.jobs.submit(
+            "control-volume",
+            self.audio.set_volume,
+            "@DEFAULT_AUDIO_SINK@",
+            value,
+            on_error=lambda error: self.show_toast(f"Volume update failed: {error}"),
+        )
+
+    @staticmethod
+    def _brightness_worker(value):
+        subprocess.run(
+            ["brightnessctl", "set", f"{value}%"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=True,
+        )
+
+    def _set_brightness(self, value):
+        self.jobs.submit(
+            "control-brightness",
+            self._brightness_worker,
+            value,
+            on_error=lambda error: self.show_toast(f"Brightness unavailable: {error}"),
+        )
 
     # --- TOGGLE HANDLERS ---
     def on_wifi_toggled(self, btn):
-        def worker():
-            state = btn.sub_lbl.get_label() != "Disabled"
-            action = "off" if state else "on"
-            subprocess.run(["nmcli", "radio", "wifi", action])
-            GLib.idle_add(self.refresh_states)
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(
+            "control-wifi-toggle",
+            self.network.set_radio,
+            not btn.active_state,
+            on_success=lambda _result: self.refresh_states(),
+            on_error=lambda error: self.show_toast(f"Wi-Fi toggle failed: {error}"),
+        )
 
     def on_bluetooth_toggled(self, btn):
-        def worker():
-            try:
-                # Toggle Adapter0 power
-                state = btn.active_state
-                action = False if state else True
-
-                # Fetch adapter path if not set
-                self.bus.call_sync(
-                    "org.bluez",
-                    self.adapter_path,
-                    "org.freedesktop.DBus.Properties",
-                    "Set",
-                    GLib.Variant(
-                        "(ssv)", ("org.bluez.Adapter1", "Powered", GLib.Variant("b", action))
-                    ),
-                    None,
-                    Gio.DBusCallFlags.NONE,
-                    -1,
-                    None,
-                )
-            except Exception as e:
-                print(f"Error toggling bluetooth: {e}")
-                GLib.idle_add(self.show_toast, f"Bluetooth toggle failed: {e}")
-            GLib.idle_add(self.refresh_states)
-
-        threading.Thread(target=worker, daemon=True).start()
+        if not self.adapter_path:
+            self.show_toast("No Bluetooth adapter found")
+            return
+        self.jobs.submit(
+            "control-bluetooth-toggle",
+            self.bluetooth.set_power,
+            self.adapter_path,
+            not btn.active_state,
+            on_success=lambda _result: self.refresh_states(),
+            on_error=lambda error: self.show_toast(f"Bluetooth toggle failed: {error}"),
+        )
 
     def on_nightlight_toggled(self, btn):
-        def worker():
-            try:
-                if btn.active_state:
-                    subprocess.run(
-                        ["hyprctl", "hyprsunset", "identity"],
-                        timeout=5,
-                        check=False,
-                    )
-                else:
-                    subprocess.run(
-                        ["hyprctl", "hyprsunset", "temperature", "4200"],
-                        timeout=5,
-                        check=False,
-                    )
-            except (OSError, subprocess.SubprocessError) as error:
-                GLib.idle_add(self.show_toast, f"Night light failed: {error}")
-            GLib.idle_add(self.refresh_states)
-
-        threading.Thread(target=worker, daemon=True).start()
+        requested = not btn.active_state
+        self.jobs.submit(
+            "control-nightlight",
+            self.nightlight.set_enabled,
+            requested,
+            on_success=lambda enabled: self.update_extras_ui(self.dnd_btn.active_state, enabled),
+            on_error=lambda error: self.show_toast(f"Night light failed: {error}"),
+        )
 
     def on_dnd_toggled(self, btn):
         state = "false" if btn.active_state else "true"
 
         def worker():
-            try:
-                subprocess.run(
-                    ["dunstctl", "set-paused", state],
-                    timeout=5,
-                    check=False,
-                )
-            except (OSError, subprocess.SubprocessError) as error:
-                GLib.idle_add(self.show_toast, f"Do Not Disturb failed: {error}")
-            GLib.idle_add(self.refresh_states)
+            subprocess.run(
+                ["dunstctl", "set-paused", state],
+                timeout=5,
+                check=True,
+            )
 
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(
+            "control-dnd-toggle",
+            worker,
+            on_success=lambda _result: self.refresh_states(),
+            on_error=lambda error: self.show_toast(f"Do Not Disturb failed: {error}"),
+        )
 
     # --- MEDIA MONITORING ---
     def start_media_monitor(self):
-        if self.media_proc:
-            return
-
-        def monitor_worker():
-            try:
-                self.media_proc = subprocess.Popen(
-                    [
-                        "playerctl",
-                        "-F",
-                        "metadata",
-                        "--format",
-                        "{{status}}::{{title}}::{{artist}}::{{mpris:artUrl}}",
-                    ],
-                    stdout=subprocess.PIPE,
-                    text=True,
-                    stderr=subprocess.DEVNULL,
-                    bufsize=1,
-                )
-                for line in iter(self.media_proc.stdout.readline, ""):
-                    parts = line.strip().split("::")
-                    if len(parts) >= 4:
-                        status, title, artist, art_url = parts[0], parts[1], parts[2], parts[3]
-                        GLib.idle_add(self.update_media_ui, status, title, artist, art_url)
-            except Exception:
-                pass
-
-        threading.Thread(target=monitor_worker, daemon=True).start()
+        self.media.subscribe(self, self.update_media_ui)
 
     def stop_media_monitor(self):
-        if self.media_proc:
-            self.media_proc.terminate()
-            self.media_proc = None
+        self.media.unsubscribe(self)
 
-    def update_media_ui(self, status, title, artist, art_url):
+    def update_media_ui(self, state):
+        status, title, artist, art_url = (
+            state.status,
+            state.title,
+            state.artist,
+            state.artwork_url,
+        )
         if not title and not artist:
             self.media_card.set_visible(False)
             return
@@ -590,42 +477,22 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         self.media_card.set_visible(True)
 
     def load_art_async(self, url):
-        def worker():
-            try:
-                if url.startswith("file://"):
-                    path = url[7:]
-                    pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 48, 48, True)
-                    GLib.idle_add(
-                        self.media_art.set_from_paintable, Gdk.Texture.new_for_pixbuf(pix)
-                    )
-                elif url.startswith("http://") or url.startswith("https://"):
-                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                    with urllib.request.urlopen(req, timeout=3) as response:
-                        data = response.read(2 * 1024 * 1024 + 1)
-                    if len(data) > 2 * 1024 * 1024:
-                        raise ValueError("Media artwork exceeds 2 MiB")
-                    loader = GdkPixbuf.PixbufLoader()
-                    loader.write(data)
-                    loader.close()
-                    pix = loader.get_pixbuf()
-                    if pix:
-                        scaled = pix.scale_simple(48, 48, GdkPixbuf.InterpType.BILINEAR)
-                        GLib.idle_add(
-                            self.media_art.set_from_paintable, Gdk.Texture.new_for_pixbuf(scaled)
-                        )
-            except Exception:
-                GLib.idle_add(self.media_art.set_from_icon_name, "audio-x-generic-symbolic")
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.media.load_artwork(
+            self,
+            url,
+            48,
+            lambda texture: (
+                self.media_art.set_from_paintable(texture)
+                if texture is not None
+                else self.media_art.set_from_icon_name("audio-x-generic-symbolic")
+            ),
+        )
 
     def run_player_cmd(self, action):
-        def worker():
-            try:
-                subprocess.run(["playerctl", action], timeout=5, check=False)
-            except (OSError, subprocess.SubprocessError) as error:
-                GLib.idle_add(self.show_toast, f"Media control failed: {error}")
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.media.command(
+            action,
+            lambda error: self.show_toast(f"Media control failed: {error}"),
+        )
 
     # --- SESSION ACTIONS ---
     def run_session_cmd(self, cmd):

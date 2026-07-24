@@ -3,15 +3,62 @@
 
 set -Eeuo pipefail
 
-updates=()
-if command -v checkupdates >/dev/null 2>&1; then
-    mapfile -t updates < <(checkupdates 2>/dev/null || true)
+json_escape() {
+    local value=$1
+    value=${value//\\/\\\\}
+    value=${value//\"/\\\"}
+    value=${value//$'\n'/\\n}
+    printf '%s' "${value}"
+}
+
+emit() {
+    local text=$1
+    local tooltip=$2
+    local class=$3
+    printf '{"text":"%s","tooltip":"%s","class":"%s"}\n' \
+        "$(json_escape "${text}")" \
+        "$(json_escape "${tooltip}")" \
+        "$(json_escape "${class}")"
+}
+
+if ! command -v checkupdates >/dev/null 2>&1; then
+    emit "?" "checkupdates not installed" "error"
+    exit 0
 fi
 
-count=${#updates[@]}
-if ((count > 0)); then
-    printf '{"text":"󰏔 %d","tooltip":"%d update%s available","class":"pending"}\n' \
-        "${count}" "${count}" "$([[ ${count} -eq 1 ]] || printf s)"
-else
-    printf '{"text":"󰏔 0","tooltip":"System up to date","class":"updated"}\n'
-fi
+output=""
+status=0
+set +e
+output="$(checkupdates 2>&1)"
+status=$?
+set -e
+
+case "${status}" in
+    0)
+        mapfile -t updates <<< "${output}"
+        # Drop a trailing empty line from here-string when output is empty.
+        if ((${#updates[@]} == 1)) && [[ -z ${updates[0]} ]]; then
+            updates=()
+        fi
+        count=${#updates[@]}
+        if ((count == 0)); then
+            emit "0" "System up to date" "updated"
+        else
+            tooltip="$(printf '%s\n' "${updates[@]}" | head -n 20)"
+            if ((count > 20)); then
+                tooltip+=$'\n'"…and $((count - 20)) more"
+            fi
+            emit "${count}" "${count} update$([[ ${count} -eq 1 ]] || printf s) available"$'\n'"${tooltip}" "pending"
+        fi
+        ;;
+    2)
+        emit "0" "System up to date" "updated"
+        ;;
+    *)
+        detail="$(printf '%s' "${output}" | tr '\n' ' ' | head -c 200)"
+        if [[ -z ${detail} ]]; then
+            detail="update check failed (exit ${status})"
+        fi
+        emit "!" "${detail}" "error"
+        ;;
+esac

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import logging
 import os
 import signal
 import sys
@@ -20,6 +21,12 @@ from gi.repository import Adw, Gio, GLib
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
 from costautils.app_menu import AppMenuWindow
+from costautils.backends.audio import AudioBackend
+from costautils.backends.bluetooth import BluetoothBackend
+from costautils.backends.jobs import JobManager
+from costautils.backends.media import MediaBackend
+from costautils.backends.network import NetworkBackend
+from costautils.backends.nightlight import NightLightBackend
 from costautils.blinker import BlinkerLauncher
 from costautils.blinker_manager import BlinkerManagerWindow, SettingsDialog
 from costautils.cliphist_gtk import ClipWindow
@@ -27,7 +34,7 @@ from costautils.dispatch import infer_target_from_argv0, resolve_target
 from costautils.power_menu import PowerWindow
 from costautils.singleton import forward_command
 
-USAGE = "Usage: costa-utils [--app-menu | --runner | --blinker | --blinker-manager | --clipper | --power-menu | --network-menu | --bluetooth-menu | --volume-menu | --control-center]"
+USAGE = "Usage: costa-utils [--app-menu | --runner | --blinker | --blinker-manager | --clipper | --power-menu | --network-menu | --bluetooth-menu | --volume-menu | --control-center | --shutdown]"
 
 
 def parse_target(argv):
@@ -53,6 +60,12 @@ class CostaUtilsApp(Adw.Application):
         self.hold()
 
         self.initial_target = initial_target
+        self.jobs = JobManager(max_workers=4)
+        self.audio = AudioBackend()
+        self.nightlight = NightLightBackend()
+        self.media = MediaBackend(self.jobs)
+        self.bluetooth = BluetoothBackend()
+        self.network = NetworkBackend()
         self.win_app_menu = None
         self.win_runner = None
         self.win_blinker = None
@@ -106,7 +119,9 @@ class CostaUtilsApp(Adw.Application):
             self.activate_target(target)
 
     def activate_target(self, target):
-        if target == "--app-menu":
+        if target == "--shutdown":
+            self.quit()
+        elif target == "--app-menu":
             self.activate_app_menu()
         elif target == "--runner":
             self.activate_runner()
@@ -199,8 +214,18 @@ class CostaUtilsApp(Adw.Application):
         self.win_control_center.start_media_monitor()
         self.win_control_center.present()
 
+    def do_shutdown(self):
+        self.media.close()
+        self.bluetooth.close()
+        self.jobs.close()
+        Gio.Application.do_shutdown(self)
+
 
 def main(argv):
+    logging.basicConfig(
+        level=os.environ.get("COSTA_UTILS_LOG_LEVEL", "INFO").upper(),
+        format="%(levelname)s %(name)s: %(message)s",
+    )
     mode, target, raw_target = parse_target(argv)
 
     if mode == "help":

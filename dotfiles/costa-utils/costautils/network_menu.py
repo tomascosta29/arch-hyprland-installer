@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import subprocess
-import threading
 
 import gi
 
@@ -8,29 +7,9 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, Gtk
 
+from .backends.network import parse_nmcli_terse
 
-def parse_nmcli_terse(line):
-    """Split an nmcli terse record while honoring its backslash escaping."""
-    fields = []
-    current = []
-    escaped = False
-
-    for char in line:
-        if escaped:
-            current.append(char)
-            escaped = False
-        elif char == "\\":
-            escaped = True
-        elif char == ":":
-            fields.append("".join(current))
-            current = []
-        else:
-            current.append(char)
-
-    if escaped:
-        current.append("\\")
-    fields.append("".join(current))
-    return fields
+__all__ = ["NetworkWindow", "parse_nmcli_terse"]
 
 
 class NetworkWindow(Adw.ApplicationWindow):
@@ -43,6 +22,9 @@ class NetworkWindow(Adw.ApplicationWindow):
         self.networks = []
         self.connecting = False
         self.wifi_enabled = True
+        self.jobs = app.jobs
+        self.backend = app.network
+        self.selected_network = None
 
         self.build_ui()
         self.load_css()
@@ -62,17 +44,24 @@ class NetworkWindow(Adw.ApplicationWindow):
     def on_key_pressed(self, _, keyval, keycode, state):
         name = Gtk.accelerator_name(keyval, state)
         if name == "Escape":
+            self._cancel_jobs()
             self.hide()
             return True
         return False
 
     def on_close_request(self, win):
+        self._cancel_jobs()
         self.hide()
         return True
 
     def on_is_active_changed(self, window, pspec):
         if not self.is_active() and not self.connecting:
+            self._cancel_jobs()
             self.hide()
+
+    def _cancel_jobs(self):
+        for key in ("network-scan", "network-profiles", "network-connect"):
+            self.jobs.invalidate(key)
 
     def build_ui(self):
         self.toast_overlay = Adw.ToastOverlay()
@@ -185,95 +174,39 @@ class NetworkWindow(Adw.ApplicationWindow):
         toast = Adw.Toast.new(text)
         self.toast_overlay.add_toast(toast)
 
-    def is_wifi_powered(self):
-        try:
-            res = subprocess.run(
-                ["nmcli", "radio", "wifi"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            return res.stdout.strip() == "enabled"
-        except (OSError, subprocess.SubprocessError):
-            return False
-
     def on_wifi_switch_toggled(self, switch, state):
-        def worker():
-            action = "on" if state else "off"
-            subprocess.run(["nmcli", "radio", "wifi", action])
-            GLib.idle_add(self.refresh_networks)
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(
+            "network-radio",
+            self.backend.set_radio,
+            state,
+            on_success=lambda _result: self.refresh_networks(),
+            on_error=lambda error: self.show_toast(f"Wi-Fi toggle failed: {error}"),
+        )
         return True
 
     def refresh_networks(self):
-        self.wifi_enabled = self.is_wifi_powered()
-        self.wifi_switch.set_active(self.wifi_enabled)
+        self.refresh_btn.set_sensitive(False)
+        self.jobs.submit(
+            "network-scan",
+            self.backend.scan,
+            on_success=self.update_list_ui,
+            on_error=self.on_scan_error,
+        )
 
-        if not self.wifi_enabled:
+    def on_scan_error(self, error):
+        self.refresh_btn.set_sensitive(True)
+        self.show_toast(f"Wi-Fi scan failed: {error}")
+
+    def update_list_ui(self, state):
+        self.wifi_enabled = state.enabled
+        self.wifi_switch.set_active(state.enabled)
+        self.networks = list(state.networks)
+        self.listbox.remove_all()
+
+        if not state.enabled:
+            self.refresh_btn.set_sensitive(True)
             self.stack.set_visible_child_name("disabled")
             return
-
-        self.refresh_btn.set_sensitive(False)
-
-        def worker():
-            # Trigger rescan
-            subprocess.run(
-                ["nmcli", "device", "wifi", "rescan"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-
-            proc = subprocess.run(
-                [
-                    "nmcli",
-                    "--terse",
-                    "--escape",
-                    "yes",
-                    "--fields",
-                    "SSID,SIGNAL,ACTIVE,BARS",
-                    "device",
-                    "wifi",
-                    "list",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-
-            networks = {}
-            if proc.returncode == 0:
-                for line in proc.stdout.splitlines():
-                    parts = parse_nmcli_terse(line)
-                    if len(parts) >= 4:
-                        ssid = parts[0]
-                        if not ssid:
-                            continue
-                        try:
-                            signal = int(parts[1])
-                        except ValueError:
-                            signal = 0
-                        active = parts[2] == "yes"
-                        bars = parts[3] if len(parts) > 3 else ""
-
-                        if ssid not in networks or signal > networks[ssid]["signal"]:
-                            networks[ssid] = {
-                                "ssid": ssid,
-                                "signal": signal,
-                                "active": active,
-                                "bars": bars,
-                            }
-
-            network_list = list(networks.values())
-            network_list.sort(key=lambda x: (not x["active"], -x["signal"]))
-
-            GLib.idle_add(self.update_list_ui, network_list)
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def update_list_ui(self, network_list):
-        self.networks = network_list
-        self.listbox.remove_all()
 
         for net in self.networks:
             self.listbox.append(self.make_network_row(net))
@@ -284,6 +217,7 @@ class NetworkWindow(Adw.ApplicationWindow):
     def make_network_row(self, net):
         row = Gtk.ListBoxRow()
         row.ssid = net["ssid"]
+        row.network = net
         row.active = net["active"]
 
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -315,6 +249,11 @@ class NetworkWindow(Adw.ApplicationWindow):
             label.add_css_class("bold-label")
         box.append(label)
 
+        if net["security"] not in ("", "--"):
+            lock = Gtk.Image.new_from_icon_name("network-wireless-encrypted-symbolic")
+            lock.set_tooltip_text(net["security"])
+            box.append(lock)
+
         # Connected Checkmark
         if net["active"]:
             check = Gtk.Image.new_from_icon_name("object-select-symbolic")
@@ -328,48 +267,53 @@ class NetworkWindow(Adw.ApplicationWindow):
         if self.connecting or row.active:
             return
 
-        ssid = row.ssid
-        self.selected_ssid = ssid
+        self.selected_network = row.network
+        self.jobs.submit(
+            "network-profiles",
+            self.backend.saved_profiles,
+            on_success=lambda profiles: self._choose_connection(row.network, profiles),
+            on_error=lambda error: self.show_toast(f"Saved connections unavailable: {error}"),
+        )
 
-        # Check if connection already exists
-        def check_conn_and_connect():
-            proc = subprocess.run(
-                [
-                    "nmcli",
-                    "--terse",
-                    "--escape",
-                    "yes",
-                    "--fields",
-                    "NAME,802-11-wireless.ssid",
-                    "connection",
-                    "show",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            saved_connections = {}
-            for line in proc.stdout.splitlines():
-                fields = parse_nmcli_terse(line)
-                if len(fields) >= 2 and fields[1]:
-                    saved_connections[fields[1]] = fields[0]
+    def _choose_connection(self, network, profiles):
+        exact = next(
+            (
+                profile
+                for profile in profiles
+                if profile["ssid"] == network["ssid"]
+                and profile["bssid"]
+                and profile["bssid"].casefold() == network["bssid"].casefold()
+            ),
+            None,
+        )
+        fallback = next(
+            (
+                profile
+                for profile in profiles
+                if profile["ssid"] == network["ssid"] and not profile["bssid"]
+            ),
+            None,
+        )
+        profile = exact or fallback
+        if profile is not None:
+            self.start_connection(network, profile_uuid=profile["uuid"])
+            return
 
-            if ssid in saved_connections:
-                # Connection profile exists, connect directly
-                GLib.idle_add(
-                    self.start_connection,
-                    ssid,
-                    None,
-                    saved_connections[ssid],
-                )
-            else:
-                # Connection profile doesn't exist, prompt for password
-                GLib.idle_add(self.prompt_for_password, ssid)
+        security = network["security"].upper()
+        if security in ("", "--"):
+            self.start_connection(network)
+        elif "802.1X" in security or "EAP" in security:
+            self.show_toast("Enterprise Wi-Fi requires NetworkManager's full editor")
+            self.hide()
+            try:
+                subprocess.Popen(["kitty", "--class", "nmtui", "-e", "nmtui-connect"])
+            except OSError as error:
+                self.show_toast(f"Unable to open nmtui: {error}")
+        else:
+            self.prompt_for_password(network)
 
-        threading.Thread(target=check_conn_and_connect, daemon=True).start()
-
-    def prompt_for_password(self, ssid):
-        escaped_ssid = GLib.markup_escape_text(ssid)
+    def prompt_for_password(self, network):
+        escaped_ssid = GLib.markup_escape_text(network["ssid"])
         self.password_title.set_markup(f"Connect to <b>{escaped_ssid}</b>")
         self.password_entry.set_text("")
         self.stack.set_visible_child_name("password")
@@ -377,44 +321,40 @@ class NetworkWindow(Adw.ApplicationWindow):
 
     def cancel_password_prompt(self):
         self.stack.set_visible_child_name("list")
-        self.selected_ssid = None
+        self.selected_network = None
 
     def on_connect_with_password_clicked(self):
         password = self.password_entry.get_text()
-        ssid = self.selected_ssid
-        if not ssid:
+        network = self.selected_network
+        if not network:
             return
-        self.start_connection(ssid, password)
+        if not password:
+            self.show_toast("Enter the network password")
+            return
+        self.start_connection(network, password=password)
 
-    def start_connection(self, ssid, password=None, profile_name=None):
+    def start_connection(self, network, password=None, profile_uuid=None):
+        ssid = network["ssid"]
         self.connecting = True
         self.loading_status.set_description(f"Connecting to {ssid}...")
         self.stack.set_visible_child_name("loading")
 
-        def connect_worker():
-            input_text = None
-            if profile_name is not None:
-                cmd = ["nmcli", "connection", "up", "id", profile_name]
-            elif password is not None:
-                cmd = ["nmcli", "--ask", "device", "wifi", "connect", ssid]
-                input_text = f"{password}\n"
-            else:
-                cmd = ["nmcli", "device", "wifi", "connect", ssid]
-
-            res = subprocess.run(
-                cmd,
-                input=input_text,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            success = res.returncode == 0
-
-            GLib.idle_add(
-                self.on_connection_complete, success, ssid, res.stderr.strip() or res.stdout.strip()
-            )
-
-        threading.Thread(target=connect_worker, daemon=True).start()
+        if profile_uuid:
+            operation = self.backend.connect_saved
+            args = (profile_uuid,)
+        elif password is not None:
+            operation = self.backend.connect_personal
+            args = (ssid, network["bssid"], password)
+        else:
+            operation = self.backend.connect_open
+            args = (ssid, network["bssid"])
+        self.jobs.submit(
+            "network-connect",
+            operation,
+            *args,
+            on_success=lambda output: self.on_connection_complete(True, ssid, output),
+            on_error=lambda error: self.on_connection_complete(False, ssid, str(error)),
+        )
 
     def on_connection_complete(self, success, ssid, output):
         self.connecting = False

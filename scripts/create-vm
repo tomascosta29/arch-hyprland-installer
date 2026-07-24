@@ -31,7 +31,8 @@ virt-install \
     --cdrom "${ISO_PATH}" \
     --osinfo archlinux \
     --network network=default,model=virtio \
-    --graphics spice,listen=none,gl.enable=yes \
+    --graphics spice,listen=none \
+    --graphics egl-headless \
     --video virtio,model.acceleration.accel3d=yes \
     --channel spicevmc \
     --channel unix,target.type=virtio,target.name=org.qemu.guest_agent.0 \

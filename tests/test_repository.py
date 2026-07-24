@@ -35,6 +35,7 @@ class InstallerTests(unittest.TestCase):
             "dunst",
             "hyprpaper",
             "hyprpolkitagent",
+            "hyprshutdown",
             "networkmanager",
             "bluez",
             "pacman-contrib",
@@ -94,11 +95,79 @@ class InstallerTests(unittest.TestCase):
                 rf"\b{re.escape(retired_package)}\b",
             )
 
+    def test_common_workstation_packages_are_explicit(self):
+        for package in (
+            "openssh",
+            "firewalld",
+            "gvfs-mtp",
+            "file-roller",
+            "sound-theme-freedesktop",
+            "man-db",
+            "man-pages",
+            "noto-fonts",
+            "noto-fonts-emoji",
+            "noto-fonts-cjk",
+            "dosfstools",
+        ):
+            self.assertRegex(self.installer, rf"\b{re.escape(package)}\b")
+
+        for excluded_package in ("cups", "sane", "flatpak"):
+            self.assertNotRegex(
+                self.installer,
+                rf"\b{re.escape(excluded_package)}\b",
+            )
+
+    def test_installation_profiles_separate_vm_and_bare_metal_packages(self):
+        bare_metal = re.search(
+            r"bare-metal\)\s+PROFILE_PACKAGES=\((.*?)\)\s+;;",
+            self.installer,
+            flags=re.DOTALL,
+        )
+        vm = re.search(
+            r"vm\)\s+PROFILE_PACKAGES=\((.*?)\)\s+;;",
+            self.installer,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(bare_metal)
+        self.assertIsNotNone(vm)
+
+        for package in ("fwupd", "smartmontools", "nvme-cli", "ntfs-3g"):
+            self.assertRegex(bare_metal.group(1), rf"\b{re.escape(package)}\b")
+            self.assertNotRegex(vm.group(1), rf"\b{re.escape(package)}\b")
+
+        for package in ("qemu-guest-agent", "spice-vdagent"):
+            self.assertRegex(vm.group(1), rf"\b{re.escape(package)}\b")
+            self.assertNotRegex(bare_metal.group(1), rf"\b{re.escape(package)}\b")
+
+    def test_dual_disk_boot_and_keyring_integration_remain_enabled(self):
+        self.assertRegex(self.installer, r"\bos-prober\b")
+        self.assertIn("GRUB_DISABLE_OS_PROBER=false", self.installer)
+        self.assertIn("pam_gnome_keyring", self.installer)
+        self.assertIn("firewalld.service", self.installer)
+
+    def test_preflight_precedes_password_and_disk_confirmation(self):
+        self.assertIn("preflight_installation", self.installer)
+        preflight = self.installer.index("preflight_installation\n\nread -r -s -p")
+        password = self.installer.index("Password for '${USERNAME}'")
+        confirmation = self.installer.index("Type the full device path")
+        self.assertLess(preflight, password)
+        self.assertLess(password, confirmation)
+        self.assertIn("geo.mirror.pkgbuild.com/core/os/x86_64/core.db", self.installer)
+
+    def test_partition_paths_are_discovered_from_lsblk(self):
+        self.assertIn("lsblk -lnpo NAME,PARTN", self.installer)
+        self.assertIn('discover_partition "${DISK}" 1', self.installer)
+        self.assertIn('discover_partition "${DISK}" 2', self.installer)
+        self.assertNotIn("*nvme* | *mmcblk*", self.installer)
+
+    def test_installer_seeds_deployment_ownership_manifest(self):
+        self.assertIn('MANIFEST_FILE="${MANIFEST_DIR}/managed-files"', self.installer)
+        self.assertIn("'BIN\tcosta-utils'", self.installer)
+
 
 class ThemeTests(unittest.TestCase):
     def test_every_theme_is_complete(self):
         required = {
-            "colors.conf",
             "colors.css",
             "colors.lua",
             "dunstrc",
@@ -151,7 +220,14 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_waybar_jsonc_is_valid(self):
         waybar_dir = REPOSITORY_ROOT / "dotfiles" / "waybar"
-        for filename in ("config.jsonc", "modules", "user.jsonc"):
+        for filename in (
+            "config.jsonc",
+            "modules",
+            "profile.jsonc",
+            "profile-bare-metal.jsonc",
+            "profile-vm.jsonc",
+            "user.jsonc",
+        ):
             parsed = self.load_jsonc(waybar_dir / filename)
             self.assertIsInstance(parsed, dict)
 
@@ -178,7 +254,9 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_vm_profile_enables_virtio_3d(self):
         creator = (REPOSITORY_ROOT / "scripts" / "create-vm").read_text()
-        self.assertIn("gl.enable=yes", creator)
+        self.assertIn("--graphics egl-headless", creator)
+        self.assertIn("--graphics spice,listen=none", creator)
+        self.assertNotIn("gl.enable=yes", creator)
         self.assertIn("model.acceleration.accel3d=yes", creator)
 
     def test_sddm_theme_metadata_exists(self):
@@ -188,8 +266,116 @@ class ConfigurationTests(unittest.TestCase):
         self.assertTrue((theme_dir / "theme.conf").is_file())
         qml = (theme_dir / "Main.qml").read_text()
         self.assertRegex(qml, r"TextField\s*\{\s*id:\s*userField")
+        self.assertIn("property date now:", qml)
+        self.assertIn("Timer {", qml)
+        self.assertIn("Screen.width", qml)
+        self.assertIn("Screen.height", qml)
         conf = (REPOSITORY_ROOT / "dotfiles" / "sddm" / "costa.conf").read_text()
         self.assertIn("Current=costa", conf)
+
+    def test_hyprland_exits_via_hyprshutdown(self):
+        lua = (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprland.lua").read_text()
+        self.assertIn("hyprshutdown", lua)
+        self.assertNotRegex(lua, r"hl\.bind\([^)\n]*hl\.dsp\.exit\(\)")
+
+    def test_hyprland_configuration_is_lua_only(self):
+        hypr_dir = REPOSITORY_ROOT / "dotfiles" / "hypr"
+        themes_dir = REPOSITORY_ROOT / "dotfiles" / "themes"
+        unexpected_hyprlang = set(hypr_dir.rglob("*.conf")) - {
+            hypr_dir / "current_lock.conf",
+            hypr_dir / "hypridle.conf",
+            hypr_dir / "hyprlock.conf",
+            hypr_dir / "hyprsunset.conf",
+        }
+        self.assertFalse(unexpected_hyprlang)
+        self.assertFalse(list(themes_dir.glob("*/colors.conf")))
+
+        for script_name in ("desktop-settings", "monitor-select", "theme-select"):
+            script = (REPOSITORY_ROOT / "dotfiles" / "scripts" / script_name).read_text()
+            self.assertNotIn("current_colors.conf", script)
+            self.assertNotIn("input.conf", script)
+            self.assertNotIn("monitors.conf", script)
+
+    def test_hyprland_session_is_supervised_by_systemd(self):
+        user_units = REPOSITORY_ROOT / "dotfiles" / "systemd" / "user"
+        target = (user_units / "hyprland-session.target").read_text()
+        lua = (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprland.lua").read_text()
+
+        self.assertIn("BindsTo=graphical-session.target", target)
+        self.assertIn("Wants=xdg-desktop-autostart.target", target)
+        self.assertIn("PropagatesStopTo=graphical-session.target", target)
+        for unit in (
+            "cliphist-image.service",
+            "cliphist-text.service",
+            "dunst.service",
+            "hypridle.service",
+            "hyprpaper.service",
+            "hyprpolkitagent.service",
+            "hyprsunset.service",
+            "waybar.service",
+        ):
+            self.assertIn(f"Wants={unit}", target)
+
+        self.assertIn("systemctl --user start hyprland-session.target", lua)
+        self.assertIn("systemctl --user stop hyprland-session.target", lua)
+        for direct_command in (
+            'hl.exec_cmd("dunst")',
+            'hl.exec_cmd("hypridle")',
+            'hl.exec_cmd("hyprpaper")',
+            'hl.exec_cmd("hyprsunset")',
+            'hl.exec_cmd("waybar")',
+            "wl-paste --type text --watch",
+            "wl-paste --type image --watch",
+        ):
+            self.assertNotIn(direct_command, lua)
+
+        for service in ("cliphist-image.service", "cliphist-text.service"):
+            contents = (user_units / service).read_text()
+            self.assertIn("PartOf=hyprland-session.target", contents)
+            self.assertIn("Restart=on-failure", contents)
+
+        for service in (
+            "dunst",
+            "hypridle",
+            "hyprpaper",
+            "hyprpolkitagent",
+            "hyprsunset",
+            "spice-vdagent",
+            "waybar",
+        ):
+            drop_in = (user_units / f"{service}.service.d" / "costa-session.conf").read_text()
+            self.assertIn("PartOf=hyprland-session.target", drop_in)
+            self.assertIn("After=hyprland-session.target", drop_in)
+            self.assertIn("Restart=on-failure", drop_in)
+
+    def test_check_updates_distinguishes_failures(self):
+        script = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "check_updates").read_text()
+        self.assertIn('emit "0" "System up to date" "updated"', script)
+        self.assertIn('"error"', script)
+        self.assertIn("status=$?", script)
+        self.assertNotIn("|| true", script)
+
+    def test_waybar_does_not_ship_unused_mpris_module(self):
+        modules = (REPOSITORY_ROOT / "dotfiles" / "waybar" / "modules").read_text()
+        style = (REPOSITORY_ROOT / "dotfiles" / "waybar" / "style.css").read_text()
+        self.assertNotIn('"mpris"', modules)
+        self.assertNotIn("#mpris", style)
+
+    def test_runner_history_is_private(self):
+        source = (
+            REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "costautils" / "app_menu.py"
+        ).read_text()
+        self.assertIn("0o600", source)
+        self.assertIn("is_private_runner_command", source)
+        self.assertIn("clear_runner_history", source)
+
+    def test_window_capture_uses_json_geometry(self):
+        source = (
+            REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "costautils" / "blinker.py"
+        ).read_text()
+        self.assertIn('["hyprctl", "-j", "activewindow"]', source)
+        self.assertIn("No active window geometry", source)
+        self.assertNotIn('re.search(r"at:', source)
 
     def test_svg_icons_are_well_formed(self):
         icons_dir = REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "icons"
@@ -199,11 +385,56 @@ class ConfigurationTests(unittest.TestCase):
     def test_user_deployer_covers_every_config_component(self):
         deployer = (REPOSITORY_ROOT / "scripts" / "deploy-user").read_text()
         self.assertIn(
-            "CONFIG_COMPONENTS=(dunst hypr kitty rofi scripts themes waybar)",
+            "CONFIG_COMPONENTS=(dunst hypr kitty rofi scripts systemd themes waybar)",
             deployer,
         )
         self.assertIn("dotfiles/costa-utils", deployer)
-        self.assertIn('pkill -f "${BIN_DIR}/costa-utils"', deployer)
+        self.assertIn("dotfiles/mimeapps.list", deployer)
+        self.assertIn("systemctl --user daemon-reload", deployer)
+        self.assertIn('"${BIN_DIR}/costa-utils" --shutdown', deployer)
+        self.assertIn("MANIFEST_FILE", deployer)
+        self.assertIn("COSTA_DEPLOY_RELOAD", deployer)
+        self.assertIn("remove_previous_manifest", deployer)
+        self.assertNotIn('pkill -f "${BIN_DIR}/costa-utils"', deployer)
+
+    def test_waybar_vm_profile_omits_bare_metal_sensors(self):
+        vm = self.load_jsonc(REPOSITORY_ROOT / "dotfiles" / "waybar" / "profile-vm.jsonc")
+        modules = vm["group/usage"]["modules"]
+        self.assertNotIn("custom/gpu", modules)
+        self.assertNotIn("custom/vram", modules)
+        self.assertNotIn("temperature", modules)
+
+    def test_theme_switch_is_a_single_pointer_transaction(self):
+        selector = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "theme-select").read_text()
+        self.assertIn(
+            'atomic_symlink "${TARGET_THEME}" "${THEME_STATE_DIR}/current-theme"', selector
+        )
+        self.assertIn("--shutdown", selector)
+        self.assertNotIn("sync_sddm_theme", selector)
+
+    def test_costa_utils_has_bounded_shared_backends(self):
+        backends = REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "costautils" / "backends"
+        jobs = (backends / "jobs.py").read_text()
+        media = (backends / "media.py").read_text()
+        bluetooth = (backends / "bluetooth.py").read_text()
+        network = (backends / "network.py").read_text()
+        self.assertIn("ThreadPoolExecutor", jobs)
+        self.assertIn(
+            "max_workers=4",
+            (REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "costa_utils.py").read_text(),
+        )
+        self.assertIn("MAX_ARTWORK_BYTES", media)
+        for operation in ("Pair", "Trusted", "StopDiscovery", "RemoveDevice"):
+            self.assertIn(operation, bluetooth)
+        for field in ("BSSID", "SECURITY", "IN-USE"):
+            self.assertIn(field, network)
+
+    def test_installed_vm_smoke_harness_exists(self):
+        guest_validator = REPOSITORY_ROOT / "dotfiles" / "scripts" / "validate-installed"
+        host_harness = REPOSITORY_ROOT / "scripts" / "vm-smoke"
+        self.assertTrue(guest_validator.is_file())
+        self.assertTrue(host_harness.is_file())
+        self.assertIn("guest-exec-status", host_harness.read_text())
 
     def test_hyprland_uses_current_animation_leaf_names(self):
         config = (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprland.lua").read_text()

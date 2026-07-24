@@ -1,5 +1,6 @@
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -8,11 +9,15 @@ APP_ROOT = REPOSITORY_ROOT / "dotfiles" / "costa-utils"
 sys.path.insert(0, str(APP_ROOT))
 
 from costautils.app_menu import normalize_app_id, should_list_app
+from costautils.backends.audio import channel_volume_percent
+from costautils.backends.jobs import JobManager
+from costautils.backends.media import FIELD_SEPARATOR, parse_media_record
 from costautils.blinker import unique_screenshot_path
 from costautils.blinker_manager import unique_destination
 from costautils.cliphist_gtk import clipboard_mime_type
 from costautils.dispatch import infer_target_from_argv0, resolve_target
 from costautils.network_menu import parse_nmcli_terse
+from gi.repository import GLib
 
 
 class DispatchTests(unittest.TestCase):
@@ -20,6 +25,7 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(resolve_target("--clipper"), "--clipper")
         self.assertEqual(resolve_target("network"), "--network-menu")
         self.assertEqual(resolve_target("CONTROL_CENTER"), "--control-center")
+        self.assertEqual(resolve_target("shutdown"), "--shutdown")
 
     def test_unknown_target_is_rejected(self):
         self.assertIsNone(resolve_target("not-a-real-tool"))
@@ -81,6 +87,42 @@ class NetworkParsingTests(unittest.TestCase):
 
     def test_nmcli_empty_field(self):
         self.assertEqual(parse_nmcli_terse(":0:no:"), ["", "0", "no", ""])
+
+
+class BackendParsingTests(unittest.TestCase):
+    def test_media_record_does_not_confuse_colons_for_delimiters(self):
+        record = FIELD_SEPARATOR.join(
+            ("Playing", "Chapter::Two", "Artist::Guest", "file:///cover%20art.png")
+        )
+        state = parse_media_record(record)
+        self.assertEqual(state.title, "Chapter::Two")
+        self.assertEqual(state.artist, "Artist::Guest")
+
+    def test_audio_volume_accepts_non_stereo_channels(self):
+        self.assertEqual(
+            channel_volume_percent({"volume": {"mono": {"value_percent": "73%"}}}),
+            73,
+        )
+
+    def test_job_callbacks_are_one_shot_even_if_callback_returns_true(self):
+        manager = JobManager(max_workers=1)
+        delivered = []
+        manager.submit(
+            "test",
+            lambda: 7,
+            on_success=lambda value: (delivered.append(value), True)[1],
+        )
+        deadline = time.monotonic() + 2
+        context = GLib.MainContext.default()
+        while not delivered and time.monotonic() < deadline:
+            while context.pending():
+                context.iteration(False)
+            time.sleep(0.01)
+        for _iteration in range(3):
+            while context.pending():
+                context.iteration(False)
+        manager.close()
+        self.assertEqual(delivered, [7])
 
 
 class ClipboardTests(unittest.TestCase):

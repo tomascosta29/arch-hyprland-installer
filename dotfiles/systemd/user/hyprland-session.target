@@ -1,0 +1,15 @@
+[Unit]
+Description=Costa Hyprland graphical session
+BindsTo=graphical-session.target
+Wants=graphical-session-pre.target
+Wants=xdg-desktop-autostart.target
+Wants=dunst.service
+Wants=hypridle.service
+Wants=hyprpaper.service
+Wants=hyprpolkitagent.service
+Wants=hyprsunset.service
+Wants=waybar.service
+Wants=cliphist-image.service
+Wants=cliphist-text.service
+After=graphical-session-pre.target
+PropagatesStopTo=graphical-session.target

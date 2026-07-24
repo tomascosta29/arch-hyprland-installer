@@ -1,30 +1,12 @@
 #!/usr/bin/env python3
-import json
-import subprocess
-import threading
-import urllib.request
-
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, GdkPixbuf, GLib, Gtk, Pango
+from gi.repository import Adw, Gdk, Gtk, Pango
 
-
-def _channel_volume_percent(node):
-    """Read a volume percentage from a pactl JSON sink/source.
-
-    pactl reports per-channel volumes; the first channel name varies
-    (front-left for stereo, mono for mono, aux0/aux1 for HDMI, ...).
-    Fall back to the first channel we find so we don't KeyError on
-    non-standard layouts.
-    """
-    channels = node.get("volume") or {}
-    channel = channels.get("front-left") or next(iter(channels.values()), None)
-    if not channel:
-        return 0.0
-    raw = channel.get("value_percent", "0%")
-    return float(raw.rstrip("%"))
+from .backends.audio import channel_volume_percent
+from .backends.jobs import Debouncer
 
 
 class VolumeWindow(Adw.ApplicationWindow):
@@ -36,8 +18,16 @@ class VolumeWindow(Adw.ApplicationWindow):
 
         self.sinks = []
         self.sources = []
-        self.media_proc = None
+        self.jobs = app.jobs
+        self.audio = app.audio
+        self.media = app.media
         self.updating_sliders = False
+        self.output_debouncer = Debouncer(
+            90, lambda value: self._set_volume("@DEFAULT_AUDIO_SINK@", value)
+        )
+        self.input_debouncer = Debouncer(
+            90, lambda value: self._set_volume("@DEFAULT_AUDIO_SOURCE@", value)
+        )
 
         self.build_ui()
         self.load_css()
@@ -59,12 +49,17 @@ class VolumeWindow(Adw.ApplicationWindow):
         name = Gtk.accelerator_name(keyval, state)
         if name == "Escape":
             self.stop_media_monitor()
+            self.output_debouncer.cancel()
+            self.input_debouncer.cancel()
             self.hide()
             return True
         return False
 
     def on_close_request(self, win):
         self.stop_media_monitor()
+        self.output_debouncer.cancel()
+        self.input_debouncer.cancel()
+        self.jobs.invalidate("volume-refresh")
         self.hide()
         return True
 
@@ -72,6 +67,8 @@ class VolumeWindow(Adw.ApplicationWindow):
         is_act = self.is_active() if hasattr(self, "is_active") else self.get_property("is-active")
         if not is_act:
             self.stop_media_monitor()
+            self.output_debouncer.cancel()
+            self.input_debouncer.cancel()
             self.hide()
 
     def build_ui(self):
@@ -226,43 +223,17 @@ class VolumeWindow(Adw.ApplicationWindow):
         self.toast_overlay.add_toast(toast)
 
     def refresh_audio_devices(self):
-        def worker():
-            try:
-                # Sinks
-                s_proc = subprocess.run(
-                    ["pactl", "-f", "json", "list", "sinks"], capture_output=True, text=True
-                )
-                sinks = json.loads(s_proc.stdout) if s_proc.returncode == 0 else []
-                if isinstance(sinks, dict):
-                    sinks = [sinks]
-
-                # Sources
-                r_proc = subprocess.run(
-                    ["pactl", "-f", "json", "list", "sources"], capture_output=True, text=True
-                )
-                sources = json.loads(r_proc.stdout) if r_proc.returncode == 0 else []
-                if isinstance(sources, dict):
-                    sources = [sources]
-
-                # Default Sink/Source name
-                d_sink_proc = subprocess.run(
-                    ["pactl", "get-default-sink"], capture_output=True, text=True
-                )
-                def_sink = d_sink_proc.stdout.strip()
-
-                d_source_proc = subprocess.run(
-                    ["pactl", "get-default-source"], capture_output=True, text=True
-                )
-                def_source = d_source_proc.stdout.strip()
-
-                # Filter out monitors of sinks from sources
-                sources = [src for src in sources if ".monitor" not in src.get("name", "")]
-
-                GLib.idle_add(self.update_devices_ui, sinks, sources, def_sink, def_source)
-            except Exception as e:
-                print(f"Error refreshing audio devices: {e}")
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(
+            "volume-refresh",
+            self.audio.list_devices,
+            on_success=lambda result: self.update_devices_ui(
+                result[0],
+                [source for source in result[1] if ".monitor" not in source.get("name", "")],
+                result[2],
+                result[3],
+            ),
+            on_error=lambda error: self.show_toast(f"Audio devices unavailable: {error}"),
+        )
 
     def update_devices_ui(self, sinks, sources, def_sink, def_source):
         self.sinks = sinks
@@ -297,7 +268,7 @@ class VolumeWindow(Adw.ApplicationWindow):
         self.updating_sliders = True
         try:
             if active_sink_obj:
-                vol_pct = _channel_volume_percent(active_sink_obj)
+                vol_pct = channel_volume_percent(active_sink_obj)
                 self.out_slider.set_value(round(vol_pct))
                 self.out_vol_val.set_label(f"{vol_pct:.0f}%")
                 self.out_mute_btn.set_icon_name(
@@ -308,7 +279,7 @@ class VolumeWindow(Adw.ApplicationWindow):
                 self.active_sink_name = def_sink
 
             if active_source_obj:
-                vol_pct = _channel_volume_percent(active_source_obj)
+                vol_pct = channel_volume_percent(active_source_obj)
                 self.in_slider.set_value(round(vol_pct))
                 self.in_vol_val.set_label(f"{vol_pct:.0f}%")
                 self.in_mute_btn.set_icon_name(
@@ -354,21 +325,25 @@ class VolumeWindow(Adw.ApplicationWindow):
         if not row:
             return
 
-        def worker():
-            subprocess.run(["pactl", "set-default-sink", row.dev_name])
-            GLib.idle_add(self.refresh_audio_devices)
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(
+            "volume-default-sink",
+            self.audio.set_default_sink,
+            row.dev_name,
+            on_success=lambda _result: self.refresh_audio_devices(),
+            on_error=lambda error: self.show_toast(f"Output selection failed: {error}"),
+        )
 
     def on_source_activated(self, listbox, row):
         if not row:
             return
 
-        def worker():
-            subprocess.run(["pactl", "set-default-source", row.dev_name])
-            GLib.idle_add(self.refresh_audio_devices)
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(
+            "volume-default-source",
+            self.audio.set_default_source,
+            row.dev_name,
+            on_success=lambda _result: self.refresh_audio_devices(),
+            on_error=lambda error: self.show_toast(f"Input selection failed: {error}"),
+        )
 
     def on_output_slider_changed(self, scale):
         if self.updating_sliders:
@@ -376,18 +351,7 @@ class VolumeWindow(Adw.ApplicationWindow):
         val = int(scale.get_value())
         self.out_vol_val.set_label(f"{val}%")
 
-        def worker():
-            try:
-                subprocess.run(
-                    ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"],
-                    stdout=subprocess.DEVNULL,
-                    timeout=5,
-                    check=False,
-                )
-            except (OSError, subprocess.SubprocessError) as error:
-                GLib.idle_add(self.show_toast, f"Output volume failed: {error}")
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.output_debouncer.schedule(val)
 
     def on_input_slider_changed(self, scale):
         if self.updating_sliders:
@@ -395,83 +359,49 @@ class VolumeWindow(Adw.ApplicationWindow):
         val = int(scale.get_value())
         self.in_vol_val.set_label(f"{val}%")
 
-        def worker():
-            try:
-                subprocess.run(
-                    ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", f"{val}%"],
-                    stdout=subprocess.DEVNULL,
-                    timeout=5,
-                    check=False,
-                )
-            except (OSError, subprocess.SubprocessError) as error:
-                GLib.idle_add(self.show_toast, f"Input volume failed: {error}")
+        self.input_debouncer.schedule(val)
 
-        threading.Thread(target=worker, daemon=True).start()
+    def _set_volume(self, target, value):
+        self.jobs.submit(
+            f"volume-set-{target}",
+            self.audio.set_volume,
+            target,
+            value,
+            on_error=lambda error: self.show_toast(f"Volume update failed: {error}"),
+        )
 
     def on_output_mute_clicked(self, _):
-        def worker():
-            try:
-                subprocess.run(
-                    ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"],
-                    timeout=5,
-                    check=False,
-                )
-            except (OSError, subprocess.SubprocessError) as error:
-                GLib.idle_add(self.show_toast, f"Mute toggle failed: {error}")
-            GLib.idle_add(self.refresh_audio_devices)
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(
+            "volume-mute-output",
+            self.audio.toggle_mute,
+            "@DEFAULT_AUDIO_SINK@",
+            on_success=lambda _result: self.refresh_audio_devices(),
+            on_error=lambda error: self.show_toast(f"Mute toggle failed: {error}"),
+        )
 
     def on_input_mute_clicked(self, _):
-        def worker():
-            try:
-                subprocess.run(
-                    ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"],
-                    timeout=5,
-                    check=False,
-                )
-            except (OSError, subprocess.SubprocessError) as error:
-                GLib.idle_add(self.show_toast, f"Mute toggle failed: {error}")
-            GLib.idle_add(self.refresh_audio_devices)
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(
+            "volume-mute-input",
+            self.audio.toggle_mute,
+            "@DEFAULT_AUDIO_SOURCE@",
+            on_success=lambda _result: self.refresh_audio_devices(),
+            on_error=lambda error: self.show_toast(f"Mute toggle failed: {error}"),
+        )
 
     # --- MEDIA MONITORING ---
     def start_media_monitor(self):
-        if self.media_proc:
-            return
-
-        def monitor_worker():
-            try:
-                self.media_proc = subprocess.Popen(
-                    [
-                        "playerctl",
-                        "-F",
-                        "metadata",
-                        "--format",
-                        "{{status}}::{{title}}::{{artist}}::{{mpris:artUrl}}",
-                    ],
-                    stdout=subprocess.PIPE,
-                    text=True,
-                    stderr=subprocess.DEVNULL,
-                    bufsize=1,
-                )
-                for line in iter(self.media_proc.stdout.readline, ""):
-                    parts = line.strip().split("::")
-                    if len(parts) >= 4:
-                        status, title, artist, art_url = parts[0], parts[1], parts[2], parts[3]
-                        GLib.idle_add(self.update_media_ui, status, title, artist, art_url)
-            except Exception:
-                pass
-
-        threading.Thread(target=monitor_worker, daemon=True).start()
+        self.media.subscribe(self, self.update_media_ui)
 
     def stop_media_monitor(self):
-        if self.media_proc:
-            self.media_proc.terminate()
-            self.media_proc = None
+        self.media.unsubscribe(self)
 
-    def update_media_ui(self, status, title, artist, art_url):
+    def update_media_ui(self, state):
+        status, title, artist, art_url = (
+            state.status,
+            state.title,
+            state.artist,
+            state.artwork_url,
+        )
         if not title and not artist:
             self.media_card.set_visible(False)
             return
@@ -493,42 +423,22 @@ class VolumeWindow(Adw.ApplicationWindow):
         self.media_card.set_visible(True)
 
     def load_art_async(self, url):
-        def worker():
-            try:
-                if url.startswith("file://"):
-                    path = url[7:]
-                    pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 64, 64, True)
-                    GLib.idle_add(
-                        self.media_art.set_from_paintable, Gdk.Texture.new_for_pixbuf(pix)
-                    )
-                elif url.startswith("http://") or url.startswith("https://"):
-                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                    with urllib.request.urlopen(req, timeout=3) as response:
-                        data = response.read(2 * 1024 * 1024 + 1)
-                    if len(data) > 2 * 1024 * 1024:
-                        raise ValueError("Media artwork exceeds 2 MiB")
-                    loader = GdkPixbuf.PixbufLoader()
-                    loader.write(data)
-                    loader.close()
-                    pix = loader.get_pixbuf()
-                    if pix:
-                        scaled = pix.scale_simple(64, 64, GdkPixbuf.InterpType.BILINEAR)
-                        GLib.idle_add(
-                            self.media_art.set_from_paintable, Gdk.Texture.new_for_pixbuf(scaled)
-                        )
-            except Exception:
-                GLib.idle_add(self.media_art.set_from_icon_name, "audio-x-generic-symbolic")
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.media.load_artwork(
+            self,
+            url,
+            64,
+            lambda texture: (
+                self.media_art.set_from_paintable(texture)
+                if texture is not None
+                else self.media_art.set_from_icon_name("audio-x-generic-symbolic")
+            ),
+        )
 
     def run_player_cmd(self, action):
-        def worker():
-            try:
-                subprocess.run(["playerctl", action], timeout=5, check=False)
-            except (OSError, subprocess.SubprocessError) as error:
-                GLib.idle_add(self.show_toast, f"Media control failed: {error}")
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.media.command(
+            action,
+            lambda error: self.show_toast(f"Media control failed: {error}"),
+        )
 
     def load_css(self):
         css = b"""

@@ -14,6 +14,7 @@ COMMAND_TO_FLAG = {
     "--bluetooth-menu": "--bluetooth-menu",
     "--volume-menu": "--volume-menu",
     "--control-center": "--control-center",
+    "--shutdown": "--shutdown",
 }
 
 NAME_TO_FLAG = {
@@ -38,6 +39,7 @@ NAME_TO_FLAG = {
     "control-center": "--control-center",
     "control_center": "--control-center",
     "control": "--control-center",
+    "shutdown": "--shutdown",
 }
 
 

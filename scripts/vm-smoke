@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Run the installed-system validator through QEMU Guest Agent.
+
+set -Eeuo pipefail
+
+readonly VM_NAME="${1:-archlinux}"
+readonly VM_USER="${2:-fcosta}"
+readonly CONNECTION="qemu:///system"
+
+die() {
+    printf 'Error: %s\n' "$1" >&2
+    exit 1
+}
+
+for command_name in virsh jq base64; do
+    command -v "${command_name}" >/dev/null 2>&1 ||
+        die "Required host command '${command_name}' is unavailable."
+done
+
+[[ "$(virsh --connect "${CONNECTION}" domstate "${VM_NAME}")" == running ]] ||
+    die "VM '${VM_NAME}' is not running."
+virsh --connect "${CONNECTION}" qemu-agent-command "${VM_NAME}" \
+    '{"execute":"guest-ping"}' >/dev/null ||
+    die "QEMU Guest Agent is not responding in '${VM_NAME}'."
+
+guest_command="HOME=/home/${VM_USER} /home/${VM_USER}/.config/scripts/validate-installed"
+payload="$(
+    jq -nc \
+        --arg path /usr/bin/su \
+        --arg user "${VM_USER}" \
+        --arg command "${guest_command}" \
+        '{
+            execute: "guest-exec",
+            arguments: {
+                path: $path,
+                arg: ["-", $user, "-c", $command],
+                "capture-output": true
+            }
+        }'
+)"
+response="$(
+    virsh --connect "${CONNECTION}" qemu-agent-command "${VM_NAME}" "${payload}"
+)"
+pid="$(jq -er '.return.pid' <<< "${response}")"
+
+for _attempt in {1..120}; do
+    status_payload="$(
+        jq -nc --argjson pid "${pid}" \
+            '{execute:"guest-exec-status", arguments:{pid:$pid}}'
+    )"
+    status="$(
+        virsh --connect "${CONNECTION}" qemu-agent-command \
+            "${VM_NAME}" "${status_payload}"
+    )"
+    if [[ "$(jq -r '.return.exited // false' <<< "${status}")" == true ]]; then
+        stdout="$(jq -r '.return["out-data"] // empty' <<< "${status}" | base64 --decode)"
+        stderr="$(jq -r '.return["err-data"] // empty' <<< "${status}" | base64 --decode)"
+        [[ -z "${stdout}" ]] || printf '%s\n' "${stdout}"
+        [[ -z "${stderr}" ]] || printf '%s\n' "${stderr}" >&2
+        exit "$(jq -r '.return.exitcode // 1' <<< "${status}")"
+    fi
+    sleep 0.5
+done
+
+die "Installed-system validation did not finish within 60 seconds."

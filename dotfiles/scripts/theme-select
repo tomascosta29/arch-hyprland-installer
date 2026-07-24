@@ -5,9 +5,9 @@ set -Eeuo pipefail
 
 readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
 readonly THEMES_DIR="${CONFIG_DIR}/themes"
-readonly SDDM_THEME_DIR="/usr/share/sddm/themes/costa"
+readonly THEME_STATE_DIR="${CONFIG_DIR}/costa"
+readonly RELOAD_DESKTOP="${COSTA_THEME_RELOAD:-1}"
 readonly REQUIRED_FILES=(
-    colors.conf
     colors.css
     colors.lua
     dunstrc
@@ -40,59 +40,39 @@ choose_theme() {
     printf '%s\n' "${selection}"
 }
 
-atomic_install() {
-    local source_file=$1 destination_file=$2 destination_dir temp_file
+atomic_symlink() {
+    local target=$1 destination=$2 destination_dir temp_link
 
-    destination_dir="$(dirname "${destination_file}")"
+    destination_dir="$(dirname "${destination}")"
     mkdir -p "${destination_dir}"
-    temp_file="$(mktemp "${destination_dir}/.$(basename "${destination_file}").XXXXXX")"
-    cp "${source_file}" "${temp_file}"
-    chmod 0644 "${temp_file}"
-    mv -f "${temp_file}" "${destination_file}"
+    temp_link="${destination_dir}/.$(basename "${destination}").theme.$$"
+    rm -f "${temp_link}"
+    ln -s "${target}" "${temp_link}"
+    mv -Tf "${temp_link}" "${destination}"
 }
 
-sync_sddm_theme() {
-    local accent background foreground foreground_dim theme_conf
+validate_theme() {
+    local required_variable
 
-    [[ -d "${SDDM_THEME_DIR}" && -w "${SDDM_THEME_DIR}" ]] || return 0
-
-    accent="$(
-        sed -n 's/^@define-color soft-blue #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
-            "${TARGET_THEME}/colors.css" | head -n1
-    )"
-    background="$(
-        sed -n 's/^@define-color background #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
-            "${TARGET_THEME}/colors.css" | head -n1
-    )"
-    foreground="$(
-        sed -n 's/^@define-color foreground #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
-            "${TARGET_THEME}/colors.css" | head -n1
-    )"
-    foreground_dim="$(
-        sed -n 's/^@define-color foreground-dim #\([A-Fa-f0-9]\{6\}\).*/\1/p' \
-            "${TARGET_THEME}/colors.css" | head -n1
-    )"
-
-    [[ -n "${accent}" && -n "${background}" && -n "${foreground}" ]] || return 0
-
-    cp "${TARGET_THEME}/wallpaper.png" "${SDDM_THEME_DIR}/background.png"
-    theme_conf="$(cat <<EOF
-[General]
-background=background.png
-title=Welcome
-accent=#${accent}
-backgroundFill=#${background}
-foreground=#${foreground}
-foregroundDim=#${foreground_dim:-738091}
-fontFamily=JetBrainsMono Nerd Font
-EOF
-)"
-    printf '%s\n' "${theme_conf}" > "${SDDM_THEME_DIR}/theme.conf"
+    for required_variable in \
+        background foreground foreground-dim soft-blue soft-red; do
+        grep -Eq "^@define-color ${required_variable} #[A-Fa-f0-9]{6};" \
+            "${TARGET_THEME}/colors.css" ||
+            die "Theme '${THEME}' has an invalid or missing '${required_variable}' color."
+    done
+    grep -Eq '^hl\.config\(\{' "${TARGET_THEME}/colors.lua" ||
+        die "Theme '${THEME}' does not contain a Hyprland Lua configuration."
+    if command -v luac >/dev/null 2>&1; then
+        luac -p "${TARGET_THEME}/colors.lua" ||
+            die "Theme '${THEME}' has invalid Lua syntax."
+    fi
 }
 
 if (($# > 1)); then
     die "Usage: theme-select [theme-name]"
 fi
+[[ "${RELOAD_DESKTOP}" == 0 || "${RELOAD_DESKTOP}" == 1 ]] ||
+    die "COSTA_THEME_RELOAD must be 0 or 1."
 
 THEME="${1:-}"
 [[ -n "${THEME}" ]] || THEME="$(choose_theme)"
@@ -107,27 +87,32 @@ for required_file in "${REQUIRED_FILES[@]}"; do
     [[ -f "${TARGET_THEME}/${required_file}" ]] ||
         die "Theme '${THEME}' is incomplete: missing '${required_file}'."
 done
+validate_theme
 
 printf 'Applying theme: %s\n' "${THEME}"
 
-atomic_install "${TARGET_THEME}/colors.conf" \
-    "${CONFIG_DIR}/hypr/current_colors.conf"
-atomic_install "${TARGET_THEME}/colors.lua" \
+mkdir -p "${THEME_STATE_DIR}"
+
+# Each consumer follows this stable path. Once these links exist, changing all
+# theme components is a single atomic symlink rename below.
+atomic_symlink "${THEME_STATE_DIR}/current-theme/colors.lua" \
     "${CONFIG_DIR}/hypr/current_colors.lua"
-atomic_install "${TARGET_THEME}/lock.conf" \
+atomic_symlink "${THEME_STATE_DIR}/current-theme/lock.conf" \
     "${CONFIG_DIR}/hypr/current_lock.conf"
-atomic_install "${TARGET_THEME}/colors.css" \
+atomic_symlink "${THEME_STATE_DIR}/current-theme/colors.css" \
     "${CONFIG_DIR}/waybar/colors.css"
-atomic_install "${TARGET_THEME}/kitty-theme.conf" \
+atomic_symlink "${THEME_STATE_DIR}/current-theme/kitty-theme.conf" \
     "${CONFIG_DIR}/kitty/kitty-theme.conf"
-atomic_install "${TARGET_THEME}/rofi-theme.rasi" \
+atomic_symlink "${THEME_STATE_DIR}/current-theme/rofi-theme.rasi" \
     "${CONFIG_DIR}/rofi/rofi-theme.rasi"
-atomic_install "${TARGET_THEME}/dunstrc" \
+atomic_symlink "${THEME_STATE_DIR}/current-theme/dunstrc" \
     "${CONFIG_DIR}/dunst/dunstrc"
-atomic_install "${TARGET_THEME}/gtk-4.0/gtk.css" \
+atomic_symlink "${THEME_STATE_DIR}/current-theme/gtk-4.0/gtk.css" \
     "${CONFIG_DIR}/gtk-4.0/gtk.css"
-atomic_install "${TARGET_THEME}/wallpaper.png" \
+atomic_symlink "${THEME_STATE_DIR}/current-theme/wallpaper.png" \
     "${CONFIG_DIR}/hypr/current_wallpaper.png"
+
+atomic_symlink "${TARGET_THEME}" "${THEME_STATE_DIR}/current-theme"
 
 hyprpaper_temp="$(mktemp "${CONFIG_DIR}/hypr/.hyprpaper.conf.XXXXXX")"
 cat > "${hyprpaper_temp}" <<HYPRPAPER
@@ -141,23 +126,33 @@ HYPRPAPER
 chmod 0644 "${hyprpaper_temp}"
 mv -f "${hyprpaper_temp}" "${CONFIG_DIR}/hypr/hyprpaper.conf"
 
-sync_sddm_theme || true
+# SDDM is intentionally an installation-time theme. A desktop user cannot
+# safely mutate /usr/share, and silently skipping that update was misleading.
 
-if command -v hyprctl >/dev/null 2>&1 && pgrep -x Hyprland >/dev/null; then
+if [[ "${RELOAD_DESKTOP}" == 1 ]] &&
+    command -v hyprctl >/dev/null 2>&1 &&
+    pgrep -x Hyprland >/dev/null; then
     hyprctl reload >/dev/null 2>&1 || true
 fi
-if pgrep -x hyprpaper >/dev/null; then
-    pkill -x hyprpaper
-    hyprpaper >/dev/null 2>&1 &
+if [[ "${RELOAD_DESKTOP}" == 1 ]] &&
+    command -v systemctl >/dev/null 2>&1 &&
+    systemctl --user is-active --quiet hyprland-session.target; then
+    systemctl --user try-restart hyprpaper.service >/dev/null 2>&1 || true
+    systemctl --user try-reload-or-restart waybar.service >/dev/null 2>&1 || true
+    systemctl --user try-reload-or-restart dunst.service >/dev/null 2>&1 || true
 fi
-if pgrep -x waybar >/dev/null; then
-    pkill -USR2 -x waybar || true
-fi
-if command -v dunstctl >/dev/null 2>&1 && pgrep -x dunst >/dev/null; then
-    dunstctl reload >/dev/null 2>&1 || true
+if [[ "${RELOAD_DESKTOP}" == 1 ]] && pgrep -x kitty >/dev/null 2>&1; then
+    pkill -USR1 -x kitty >/dev/null 2>&1 || true
 fi
 
-if command -v notify-send >/dev/null 2>&1 &&
+# GTK providers are process-local. Ask the singleton to exit cleanly so its
+# next invocation reads the newly selected GTK theme.
+if [[ "${RELOAD_DESKTOP}" == 1 && -x "${HOME}/.local/bin/costa-utils" ]]; then
+    "${HOME}/.local/bin/costa-utils" --shutdown >/dev/null 2>&1 || true
+fi
+
+if [[ "${RELOAD_DESKTOP}" == 1 ]] &&
+    command -v notify-send >/dev/null 2>&1 &&
     [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
     notify-send -i preferences-desktop-theme \
         "Theme Engine" "Applied '${THEME}' to the desktop." || true

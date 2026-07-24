@@ -4,7 +4,6 @@ import math
 import os
 import re
 import subprocess
-import threading
 
 import gi
 
@@ -106,24 +105,53 @@ def should_list_app(app_info):
 def load_runner_history():
     try:
         with open(HISTORY_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+        return data if isinstance(data, list) else []
     except Exception:
         return []
 
 
 def save_runner_history(history):
     try:
-        os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
-        with open(HISTORY_FILE, "w") as f:
-            json.dump(history[:50], f)
+        directory = os.path.dirname(HISTORY_FILE)
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        payload = json.dumps(history[:50])
+        fd = os.open(
+            HISTORY_FILE,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o600,
+        )
+        with os.fdopen(fd, "w") as f:
+            f.write(payload)
+        os.chmod(HISTORY_FILE, 0o600)
     except Exception:
         pass
+
+
+def is_private_runner_command(cmd):
+    """Leading space opts out of history, matching bash HISTCONTROL=ignorespace."""
+    return bool(cmd) and cmd[0].isspace()
+
+
+def remember_runner_command(history, cmd):
+    """Insert cmd at the front of history unless it is marked private."""
+    if is_private_runner_command(cmd):
+        return history
+    cmd = cmd.strip()
+    if not cmd:
+        return history
+    if cmd in history:
+        history.remove(cmd)
+    history.insert(0, cmd)
+    save_runner_history(history)
+    return history
 
 
 class AppMenuWindow(Adw.ApplicationWindow):
     def __init__(self, app, runner_mode=False):
         self.runner_mode = runner_mode
         super().__init__(application=app, title="Runner" if runner_mode else "AppMenu")
+        self.jobs = app.jobs
         self.set_default_size(720, 520)
         self.set_modal(True)
         self.set_resizable(False)
@@ -300,35 +328,37 @@ class AppMenuWindow(Adw.ApplicationWindow):
 
     def run_terminal(self, cmd):
         def worker():
-            try:
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
-                output = (
-                    result.stdout.strip() or result.stderr.strip() or "Command finished (no output)"
-                )
-                GLib.idle_add(
-                    self.show_live_result,
-                    "Command Output",
-                    output,
-                    "utilities-terminal-symbolic",
-                    lambda: self.copy_to_clipboard(output),
-                    True,
-                )
-            except subprocess.TimeoutExpired:
-                GLib.idle_add(
-                    self.show_live_result,
-                    "Error",
-                    "Command timed out",
-                    "dialog-error-symbolic",
-                    None,
-                )
-            except Exception as e:
-                GLib.idle_add(self.show_live_result, "Error", str(e), "dialog-error-symbolic", None)
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            return result.stdout.strip() or result.stderr.strip() or "Command finished (no output)"
 
         self.showing_output = True
         self.show_live_result("Running...", cmd, "view-refresh-symbolic", None)
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(
+            f"runner-command-{id(self)}",
+            worker,
+            on_success=lambda output: self.show_live_result(
+                "Command Output",
+                output,
+                "utilities-terminal-symbolic",
+                lambda: self.copy_to_clipboard(output),
+                True,
+            ),
+            on_error=lambda error: self.show_live_result(
+                "Error",
+                "Command timed out" if isinstance(error, subprocess.TimeoutExpired) else str(error),
+                "dialog-error-symbolic",
+                None,
+            ),
+        )
 
     def hide_window(self):
+        self.jobs.invalidate(f"runner-command-{id(self)}")
         self.set_visible(False)
         self.search_entry.set_text("")
         self.hide_live_result()
@@ -368,8 +398,8 @@ class AppMenuWindow(Adw.ApplicationWindow):
             return
 
         if self.runner_mode:
-            query = entry.get_text().strip()
-            if query:
+            query = entry.get_text()
+            if query.strip():
                 self.run_command_line(query)
             return
 
@@ -378,7 +408,8 @@ class AppMenuWindow(Adw.ApplicationWindow):
             self.on_app_activated(self.flowbox, child)
 
     def on_search_changed(self, entry):
-        query = entry.get_text().strip()
+        raw_query = entry.get_text()
+        query = raw_query.strip()
         lower_query = query.lower()
 
         if self.showing_output:
@@ -435,7 +466,7 @@ class AppMenuWindow(Adw.ApplicationWindow):
                         "Run Command",
                         query,
                         "utilities-terminal-symbolic",
-                        lambda: self.run_command_line(query),
+                        lambda q=raw_query: self.run_command_line(q),
                     )
                     has_results = True
 
@@ -520,15 +551,19 @@ class AppMenuWindow(Adw.ApplicationWindow):
         if row and hasattr(row, "cmd_text"):
             self.run_command_line(row.cmd_text)
 
+    def clear_runner_history(self):
+        self.history = []
+        self.filtered_history = []
+        save_runner_history(self.history)
+        self.on_search_changed(self.search_entry)
+
     def run_command_line(self, cmd):
+        raw = cmd
         cmd = cmd.strip()
         if not cmd:
             return
 
-        if cmd in self.history:
-            self.history.remove(cmd)
-        self.history.insert(0, cmd)
-        save_runner_history(self.history)
+        remember_runner_command(self.history, raw)
 
         try:
             subprocess.Popen(cmd, shell=True, start_new_session=True)
@@ -538,13 +573,11 @@ class AppMenuWindow(Adw.ApplicationWindow):
         self.hide_window()
 
     def run_in_terminal(self, cmd):
+        raw = cmd
         cmd = cmd.strip()
         if not cmd:
             return
-        if cmd in self.history:
-            self.history.remove(cmd)
-        self.history.insert(0, cmd)
-        save_runner_history(self.history)
+        remember_runner_command(self.history, raw)
         subprocess.Popen(
             ["kitty", "--hold", "sh", "-lc", cmd],
             start_new_session=True,
@@ -565,6 +598,9 @@ class AppMenuWindow(Adw.ApplicationWindow):
         name = Gtk.accelerator_name(keyval, state)
 
         if self.runner_mode:
+            if name in ("<Control><Shift>Delete", "<Primary><Shift>Delete"):
+                self.clear_runner_history()
+                return True
             if name == "Down":
                 if self.search_entry.has_focus():
                     row = self.history_listbox.get_row_at_index(0)
@@ -596,12 +632,12 @@ class AppMenuWindow(Adw.ApplicationWindow):
                                 self.history_listbox.select_row(prev_row)
                         return True
             elif name == "<Shift>Return":
-                query = self.search_entry.get_text().strip()
-                if not query:
+                query = self.search_entry.get_text()
+                if not query.strip():
                     selected = self.history_listbox.get_selected_row()
                     if selected and hasattr(selected, "cmd_text"):
                         query = selected.cmd_text
-                if query:
+                if query.strip():
                     self.run_in_terminal(query)
                 return True
             elif name in ("Return", "KP_Enter"):
