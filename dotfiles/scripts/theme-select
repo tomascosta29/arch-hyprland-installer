@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Master Unified Theme Switcher Engine for Hyprland
-# Swaps colors across Hyprland, Waybar, Kitty, Rofi, Dunst, & Wallpaper
+# Master Unified Theme Switcher Engine for Hyprland & costa-utils
+# Swaps colors across Hyprland, Waybar, Kitty, Rofi, Dunst, GTK4/Libadwaita, & Wallpaper
 # ==============================================================================
 
 set -euo pipefail
@@ -63,7 +63,14 @@ if [[ -f "${TARGET_THEME}/dunstrc" ]]; then
     cp "${TARGET_THEME}/dunstrc" "${CONFIG_DIR}/dunst/dunstrc"
 fi
 
-# 6. Update Wallpaper & Hyprpaper
+# 6. Update GTK4 & Libadwaita Theme (For costa-utils)
+if [[ -f "${TARGET_THEME}/gtk-4.0/gtk.css" ]]; then
+    mkdir -p "${CONFIG_DIR}/gtk-4.0" "${CONFIG_DIR}/gtk-3.0"
+    cp "${TARGET_THEME}/gtk-4.0/gtk.css" "${CONFIG_DIR}/gtk-4.0/gtk.css"
+    cp "${TARGET_THEME}/gtk-4.0/gtk.css" "${CONFIG_DIR}/gtk-3.0/gtk.css"
+fi
+
+# 7. Update Wallpaper & Hyprpaper
 if [[ -f "${TARGET_THEME}/wallpaper.png" ]]; then
     mkdir -p "${CONFIG_DIR}/hypr"
     cp "${TARGET_THEME}/wallpaper.png" "${CONFIG_DIR}/hypr/current_wallpaper.png"
@@ -76,7 +83,7 @@ splash = false
 EOF
 fi
 
-# 7. Live Reload Daemons
+# 8. Live Reload Daemons
 if command -v hyprctl &>/dev/null && pgrep -x Hyprland &>/dev/null; then
     hyprctl reload 2>/dev/null || true
 fi
@@ -100,7 +107,7 @@ fi
 
 # Notification Popup
 if command -v notify-send &>/dev/null; then
-    notify-send -i preferences-desktop-theme "Theme Engine" "Successfully applied '${THEME}'"
+    notify-send -i preferences-desktop-theme "Theme Engine" "Successfully applied '${THEME}' to Desktop & costa-utils"
 fi
 
 echo "Theme '${THEME}' applied successfully!"

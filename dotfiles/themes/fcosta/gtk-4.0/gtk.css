@@ -1,0 +1,11 @@
+/* fcosta Nordfox GTK4 / Libadwaita Theme */
+@define-color window_bg_color #192330;
+@define-color window_fg_color #CDCECF;
+@define-color accent_bg_color #719CD6;
+@define-color accent_fg_color #192330;
+@define-color card_bg_color #212E3F;
+@define-color card_fg_color #CDCECF;
+@define-color dialog_bg_color #192330;
+@define-color popover_bg_color #212E3F;
+@define-color view_bg_color #192330;
+@define-color view_fg_color #CDCECF;
