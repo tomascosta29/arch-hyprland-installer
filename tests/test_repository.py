@@ -149,6 +149,7 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_costa_utils_uses_gl_fallback_without_amdgpu(self):
         launcher = (REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "costa_utils.py").read_text()
+        self.assertIn('os.environ.setdefault("GSK_RENDERER", "cairo")', launcher)
         self.assertIn('os.environ.setdefault("GSK_RENDERER", "gl")', launcher)
 
 
