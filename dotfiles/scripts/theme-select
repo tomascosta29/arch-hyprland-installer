@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Master Unified Theme Switcher Engine for Hyprland
+# Swaps colors across Hyprland, Waybar, Kitty, Rofi, Dunst, & Wallpaper
+# ==============================================================================
+
+set -euo pipefail
+
+CONFIG_DIR="${HOME}/.config"
+THEMES_DIR="${CONFIG_DIR}/themes"
+
+# Select theme via Rofi menu if no argument supplied
+if [[ $# -eq 0 ]]; then
+    if [[ ! -d "${THEMES_DIR}" ]]; then
+        echo "Error: Themes directory ${THEMES_DIR} not found."
+        exit 1
+    fi
+    THEME=$(ls -1 "${THEMES_DIR}" | rofi -dmenu -i -p "󰔎 Select Theme")
+    if [[ -z "${THEME}" ]]; then
+        echo "No theme selected."
+        exit 0
+    fi
+else
+    THEME="$1"
+fi
+
+TARGET_THEME="${THEMES_DIR}/${THEME}"
+
+if [[ ! -d "${TARGET_THEME}" ]]; then
+    echo "Error: Theme '${THEME}' does not exist in ${THEMES_DIR}."
+    exit 1
+fi
+
+echo "Applying theme: ${THEME}..."
+
+# 1. Update Hyprland Colors
+if [[ -f "${TARGET_THEME}/colors.conf" ]]; then
+    mkdir -p "${CONFIG_DIR}/hypr"
+    cp "${TARGET_THEME}/colors.conf" "${CONFIG_DIR}/hypr/current_colors.conf"
+fi
+
+# 2. Update Waybar Colors
+if [[ -f "${TARGET_THEME}/colors.css" ]]; then
+    mkdir -p "${CONFIG_DIR}/waybar"
+    cp "${TARGET_THEME}/colors.css" "${CONFIG_DIR}/waybar/colors.css"
+fi
+
+# 3. Update Kitty Theme
+if [[ -f "${TARGET_THEME}/kitty-theme.conf" ]]; then
+    mkdir -p "${CONFIG_DIR}/kitty"
+    cp "${TARGET_THEME}/kitty-theme.conf" "${CONFIG_DIR}/kitty/kitty-theme.conf"
+fi
+
+# 4. Update Rofi Theme
+if [[ -f "${TARGET_THEME}/rofi-theme.rasi" ]]; then
+    mkdir -p "${CONFIG_DIR}/rofi"
+    cp "${TARGET_THEME}/rofi-theme.rasi" "${CONFIG_DIR}/rofi/rofi-theme.rasi"
+fi
+
+# 5. Update Dunst Rules
+if [[ -f "${TARGET_THEME}/dunstrc" ]]; then
+    mkdir -p "${CONFIG_DIR}/dunst"
+    cp "${TARGET_THEME}/dunstrc" "${CONFIG_DIR}/dunst/dunstrc"
+fi
+
+# 6. Update Wallpaper & Hyprpaper
+if [[ -f "${TARGET_THEME}/wallpaper.png" ]]; then
+    mkdir -p "${CONFIG_DIR}/hypr"
+    cp "${TARGET_THEME}/wallpaper.png" "${CONFIG_DIR}/hypr/current_wallpaper.png"
+    
+    # Generate hyprpaper config
+    cat <<EOF > "${CONFIG_DIR}/hypr/hyprpaper.conf"
+preload = ${CONFIG_DIR}/hypr/current_wallpaper.png
+wallpaper = , ${CONFIG_DIR}/hypr/current_wallpaper.png
+splash = false
+EOF
+fi
+
+# 7. Live Reload Daemons
+if command -v hyprctl &>/dev/null && pgrep -x Hyprland &>/dev/null; then
+    hyprctl reload 2>/dev/null || true
+fi
+
+if pgrep -x hyprpaper &>/dev/null; then
+    pkill hyprpaper || true
+    hyprpaper &
+elif command -v hyprpaper &>/dev/null && pgrep -x Hyprland &>/dev/null; then
+    hyprpaper &
+fi
+
+if pgrep -x waybar &>/dev/null; then
+    pkill waybar || true
+    waybar &
+fi
+
+if pgrep -x dunst &>/dev/null; then
+    pkill dunst || true
+    dunst &
+fi
+
+# Notification Popup
+if command -v notify-send &>/dev/null; then
+    notify-send -i preferences-desktop-theme "Theme Engine" "Successfully applied '${THEME}'"
+fi
+
+echo "Theme '${THEME}' applied successfully!"

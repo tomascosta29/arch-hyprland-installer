@@ -84,7 +84,7 @@ pacstrap -K /mnt \
     base linux linux-firmware base-devel neovim git networkmanager \
     qemu-guest-agent spice-vdagent \
     grub efibootmgr os-prober \
-    hyprland waybar kitty rofi-wayland dunst polkit-kde-agent \
+    hyprland hyprpaper waybar kitty rofi-wayland dunst polkit-kde-agent \
     xdg-desktop-portal-hyprland xdg-desktop-portal-gtk \
     pipewire pipewire-audio pipewire-pulse pipewire-alsa wireplumber pavucontrol \
     ttf-jetbrains-mono-nerd ttf-font-awesome grim slurp wl-clipboard sddm
@@ -98,10 +98,6 @@ if [[ -d "${SCRIPT_DIR}/dotfiles" ]]; then
     echo -e "${GREEN}Copying dotfiles into target root...${NC}"
     mkdir -p "/mnt/home/${USERNAME}/.config"
     cp -r "${SCRIPT_DIR}/dotfiles/"* "/mnt/home/${USERNAME}/.config/"
-    
-    # Also link/copy waybar into hypr/waybar if needed by theme
-    mkdir -p "/mnt/home/${USERNAME}/.config/hypr"
-    cp -r "${SCRIPT_DIR}/dotfiles/waybar" "/mnt/home/${USERNAME}/.config/hypr/"
 fi
 
 echo -e "\n${GREEN}[6/6] Configuring installed system...${NC}"
@@ -134,6 +130,9 @@ chmod 440 /etc/sudoers.d/10-wheel
 
 # Fix Ownership of User Home Directory
 chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}"
+
+# Apply Default Theme (Catppuccin Macchiato)
+su - "${USERNAME}" -c "chmod +x ~/.config/scripts/theme-select && ~/.config/scripts/theme-select catppuccin-macchiato" || true
 
 # Install GRUB EFI & Enable OS-Prober
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
