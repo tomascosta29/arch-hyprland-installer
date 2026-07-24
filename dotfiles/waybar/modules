@@ -247,8 +247,8 @@
     },
     // Custom Menu
     "custom/menu": {
-        "format": "",
-        "on-click": "~/.local/bin/costa-utils --app-menu",
+        "format": "󰣇",
+        "on-click": "rofi -show drun",
         "tooltip": false
     },
     // Custom Power
