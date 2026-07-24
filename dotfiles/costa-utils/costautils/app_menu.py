@@ -73,9 +73,13 @@ class AppMenuWindow(Adw.ApplicationWindow):
         return True
 
     def on_is_active_changed(self, window, pspec):
+        GLib.timeout_add(150, self._check_focus_loss)
+
+    def _check_focus_loss(self):
         is_act = self.is_active() if hasattr(self, "is_active") else self.get_property("is-active")
-        if not is_act:
+        if self.get_visible() and not is_act:
             self.hide_window()
+        return False
 
     def load_apps(self):
         # Use Gio to get all desktop apps
