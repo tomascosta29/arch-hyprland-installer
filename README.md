@@ -142,17 +142,6 @@ desktop entries, and repository invariants. It currently covers installer
 safety properties, AMD dependencies, theme completeness, SSID escaping,
 clipboard MIME handling, launcher dispatch, and screenshot collision handling.
 
-Disposable libvirt smoke testing (never destroys the validated `archlinux` VM):
-
-```bash
-./scripts/e2e-libvirt --smoke
-```
-
-That boots a temporary qcow2 overlay, verifies fstab/services/Hyprland through
-the QEMU guest agent, then deletes the disposable domain. A longer
-`--full-install` path can boot an Arch ISO onto a fresh disposable disk when
-`COSTA_E2E_CONFIRM_DESTROY=1` is set.
-
 To update an existing user's checked-out configuration without running the
 destructive installer:
 

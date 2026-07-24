@@ -105,35 +105,21 @@ require_commands
 mountpoint -q /mnt &&
     die "/mnt is already mounted. Unmount it before starting a destructive installation."
 
-NONINTERACTIVE="${COSTA_INSTALL_NONINTERACTIVE:-0}"
+printf '%bAvailable whole disks:%b\n' "${YELLOW}" "${NC}"
+lsblk -d -o NAME,SIZE,TYPE,MODEL,TRAN
+printf '\n'
 
-if [[ "${NONINTERACTIVE}" == "1" ]]; then
-    DISK="${COSTA_INSTALL_DISK:-}"
-    HOSTNAME="${COSTA_INSTALL_HOSTNAME:-archvm}"
-    USERNAME="${COSTA_INSTALL_USERNAME:-fcosta}"
-    TIMEZONE="${COSTA_INSTALL_TIMEZONE:-Europe/Vienna}"
-    KEYBOARD_LAYOUT="${COSTA_INSTALL_KEYBOARD:-pt}"
-    CLOCK_FORMAT="${COSTA_INSTALL_CLOCK:-24h}"
-    USER_PASS="${COSTA_INSTALL_PASSWORD:-}"
-    [[ -n "${DISK}" ]] || die "COSTA_INSTALL_DISK is required in noninteractive mode."
-    [[ -n "${USER_PASS}" ]] || die "COSTA_INSTALL_PASSWORD is required in noninteractive mode."
-else
-    printf '%bAvailable whole disks:%b\n' "${YELLOW}" "${NC}"
-    lsblk -d -o NAME,SIZE,TYPE,MODEL,TRAN
-    printf '\n'
-
-    read -r -p "Target whole disk (for example /dev/vda or /dev/nvme0n1): " DISK
-    read -r -p "Hostname [archvm]: " HOSTNAME
-    HOSTNAME="${HOSTNAME:-archvm}"
-    read -r -p "Username [fcosta]: " USERNAME
-    USERNAME="${USERNAME:-fcosta}"
-    read -r -p "Timezone [Europe/Vienna]: " TIMEZONE
-    TIMEZONE="${TIMEZONE:-Europe/Vienna}"
-    read -r -p "Keyboard layout [pt]: " KEYBOARD_LAYOUT
-    KEYBOARD_LAYOUT="${KEYBOARD_LAYOUT:-pt}"
-    read -r -p "Clock format (12h/24h) [24h]: " CLOCK_FORMAT
-    CLOCK_FORMAT="${CLOCK_FORMAT:-24h}"
-fi
+read -r -p "Target whole disk (for example /dev/vda or /dev/nvme0n1): " DISK
+read -r -p "Hostname [archvm]: " HOSTNAME
+HOSTNAME="${HOSTNAME:-archvm}"
+read -r -p "Username [fcosta]: " USERNAME
+USERNAME="${USERNAME:-fcosta}"
+read -r -p "Timezone [Europe/Vienna]: " TIMEZONE
+TIMEZONE="${TIMEZONE:-Europe/Vienna}"
+read -r -p "Keyboard layout [pt]: " KEYBOARD_LAYOUT
+KEYBOARD_LAYOUT="${KEYBOARD_LAYOUT:-pt}"
+read -r -p "Clock format (12h/24h) [24h]: " CLOCK_FORMAT
+CLOCK_FORMAT="${CLOCK_FORMAT:-24h}"
 
 [[ "${HOSTNAME}" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,61}[A-Za-z0-9])?$ ]] ||
     die "Hostname contains invalid characters or has an invalid length."
@@ -146,28 +132,21 @@ fi
 [[ "${CLOCK_FORMAT}" == "12h" || "${CLOCK_FORMAT}" == "24h" ]] ||
     die "Clock format must be '12h' or '24h'."
 
-if [[ "${NONINTERACTIVE}" != "1" ]]; then
-    read -r -s -p "Password for '${USERNAME}': " USER_PASS
-    printf '\n'
-    [[ -n "${USER_PASS}" ]] || die "The user password cannot be empty."
-    read -r -s -p "Confirm password: " USER_PASS_CONFIRM
-    printf '\n'
-    [[ "${USER_PASS}" == "${USER_PASS_CONFIRM}" ]] || die "Passwords do not match."
-    unset USER_PASS_CONFIRM
-fi
+read -r -s -p "Password for '${USERNAME}': " USER_PASS
+printf '\n'
+[[ -n "${USER_PASS}" ]] || die "The user password cannot be empty."
+read -r -s -p "Confirm password: " USER_PASS_CONFIRM
+printf '\n'
+[[ "${USER_PASS}" == "${USER_PASS_CONFIRM}" ]] || die "Passwords do not match."
+unset USER_PASS_CONFIRM
 
 validate_target_disk
 
 printf '\n%bDANGER: every partition and all data on %s will be erased.%b\n' \
     "${RED}" "${DISK}" "${NC}"
-if [[ "${NONINTERACTIVE}" == "1" ]]; then
-    [[ "${COSTA_INSTALL_CONFIRM_DISK:-}" == "${DISK}" ]] ||
-        die "Set COSTA_INSTALL_CONFIRM_DISK to the full device path to confirm."
-else
-    read -r -p "Type the full device path '${DISK}' to confirm: " CONFIRM_DISK
-    [[ "${CONFIRM_DISK}" == "${DISK}" ]] || die "Confirmation did not match; cancelled."
-    unset CONFIRM_DISK
-fi
+read -r -p "Type the full device path '${DISK}' to confirm: " CONFIRM_DISK
+[[ "${CONFIRM_DISK}" == "${DISK}" ]] || die "Confirmation did not match; cancelled."
+unset CONFIRM_DISK
 
 case "${DISK}" in
     *nvme* | *mmcblk*) PART_EFI="${DISK}p1"; PART_ROOT="${DISK}p2" ;;

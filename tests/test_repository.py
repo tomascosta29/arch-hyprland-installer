@@ -66,7 +66,11 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("KEYBOARD_LAYOUT", self.installer)
         self.assertIn("CLOCK_FORMAT", self.installer)
         self.assertIn("desktop-settings", self.installer)
-        self.assertIn("COSTA_INSTALL_NONINTERACTIVE", self.installer)
+
+    def test_installer_remains_interactive(self):
+        self.assertNotIn("COSTA_INSTALL_NONINTERACTIVE", self.installer)
+        self.assertNotIn("COSTA_INSTALL_CONFIRM_DISK", self.installer)
+        self.assertIn("Type the full device path", self.installer)
 
     def test_sddm_theme_is_installed(self):
         self.assertIn("dotfiles/sddm/costa", self.installer)
