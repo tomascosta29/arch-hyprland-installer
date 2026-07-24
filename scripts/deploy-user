@@ -53,6 +53,7 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 
 # Existing windows keep old Python modules in memory, so restart the suite.
+pkill -f "${BIN_DIR}/costa-utils" >/dev/null 2>&1 || true
 pkill -f "${DATA_DIR}/costa-utils/costa_utils.py" >/dev/null 2>&1 || true
 
 printf "User configuration deployed with theme '%s'.\n" "${THEME}"

@@ -140,6 +140,7 @@ class ConfigurationTests(unittest.TestCase):
             deployer,
         )
         self.assertIn("dotfiles/costa-utils", deployer)
+        self.assertIn('pkill -f "${BIN_DIR}/costa-utils"', deployer)
 
     def test_hyprland_uses_current_animation_leaf_names(self):
         config = (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprland.lua").read_text()
