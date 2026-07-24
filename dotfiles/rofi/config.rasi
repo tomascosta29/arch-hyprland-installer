@@ -1,6 +1,8 @@
 /* ==============================================================================
-   Rofi Configuration & Catppuccin Theme
+   Rofi Configuration with Dynamic Theme Support
    ============================================================================== */
+
+@import "rofi-theme.rasi"
 
 configuration {
     modi: "drun,run,window";
@@ -16,21 +18,7 @@ configuration {
     display-window: " Windows";
 }
 
-* {
-    bg-col:  #24273a;
-    bg-col-light: #363a4f;
-    border-col: #89b4fa;
-    selected-col: #363a4f;
-    blue: #89b4fa;
-    fg-col: #cad3f5;
-    fg-col2: #ed8796;
-    grey: #6e738d;
-
-    width: 600;
-    font: "JetBrainsMono Nerd Font 11";
-}
-
-element-text, element-icon , mode-switcher {
+element-text, element-icon, mode-switcher {
     background-color: inherit;
     text-color:       inherit;
 }
