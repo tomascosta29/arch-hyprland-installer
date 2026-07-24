@@ -98,6 +98,10 @@ if [[ -d "${SCRIPT_DIR}/dotfiles" ]]; then
     echo -e "${GREEN}Copying dotfiles into target root...${NC}"
     mkdir -p "/mnt/home/${USERNAME}/.config"
     cp -r "${SCRIPT_DIR}/dotfiles/"* "/mnt/home/${USERNAME}/.config/"
+    
+    # Also link/copy waybar into hypr/waybar if needed by theme
+    mkdir -p "/mnt/home/${USERNAME}/.config/hypr"
+    cp -r "${SCRIPT_DIR}/dotfiles/waybar" "/mnt/home/${USERNAME}/.config/hypr/"
 fi
 
 echo -e "\n${GREEN}[6/6] Configuring installed system...${NC}"

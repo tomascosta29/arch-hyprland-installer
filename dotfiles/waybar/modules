@@ -1,0 +1,272 @@
+{
+    // Workspaces
+    "hyprland/workspaces": {
+        "format": "{icon} {windows}",
+        "all-outputs": false,
+        "sort-by": "number",
+        "format-icons": {
+            "1": "1",
+            "2": "2",
+            "3": "3",
+            "4": "4",
+            "5": "5",
+            "6": "6",
+            "7": "7",
+            "8": "8",
+            "9": "1",
+            "10": "2",
+            "11": "3",
+            "12": "4",
+            "13": "5",
+            "14": "6",
+            "15": "7",
+            "16": "8"
+        },
+        "persistent-workspaces": {
+            "DP-1": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8
+            ],
+            "HDMI-A-1": [
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16
+            ]
+        },
+        "window-rewrite-separator": " ",
+        "window-rewrite-default": "",
+        "window-rewrite": {
+            "class<firefox>": "󰈹",
+            "class<org.mozilla.firefox>": "󰈹",
+            "class<kitty>": "",
+            "class<alacritty>": "",
+            "class<Alacritty>": "",
+            "class<foot>": "",
+            "class<google-chrome>": "",
+            "class<google-chrome-stable>": "",
+            "class<chromium>": "",
+            "class<code-oss>": "󰨞",
+            "class<vscode>": "󰨞",
+            "class<discord>": "",
+            "class<WebCord>": "",
+            "class<telegram-desktop>": "",
+            "class<org.telegram.desktop>": "",
+            "class<slack>": "󰒱",
+            "class<Signal>": "󰈔",
+            "class<spotify>": "",
+            "class<Spotify>": "",
+            "class<thunar>": "󰉋",
+            "class<Thunar>": "󰉋",
+            "class<pcmanfm>": "󰉋",
+            "class<nemo>": "󰉋",
+            "class<obsidian>": "󰎚",
+            "class<obs>": "󰐌",
+            "class<vlc>": "󰕼",
+            "class<mpv>": "󰕼",
+            "class<Gimp-2.10>": "",
+            "class<Inkscape>": "",
+            "class<blender>": "󰂫",
+            "class<steam>": "",
+            "class<lutris>": "󰺵",
+            "class<org.gnome.SystemMonitor>": "󰍛",
+            "class<pavucontrol>": "󰓃",
+            "class<nm-connection-editor>": "󰤨"
+        }
+    },
+    // Window Title
+    "hyprland/window": {
+        "format": "{}",
+        "max-length": 40,
+        "separate-outputs": true,
+        "rewrite": {
+            "": "󰇄  Desktop"
+        }
+    },
+    // Tray
+    "tray": {
+        "icon-size": 18,
+        "spacing": 10
+    },
+    // Clock
+    "clock": {
+        "interval": 60,
+        "format": "{:%a %d %b %I:%M %p}",
+        "tooltip-format": "<tt><small>{calendar}</small></tt>"
+    },
+    // System Icon (Drawer Trigger)
+    "custom/system": {
+        "format": " 󱓞 ",
+        "tooltip": false,
+        "on-click": "flatpak run net.nokyan.Resources"
+    },
+    // CPU
+    "cpu": {
+        "interval": 5,
+        "format": "󰍛 {usage}%",
+        "states": {
+            "warn": 70,
+            "crit": 90
+        },
+        "on-click": "alacritty --class alacritty-float --config-file ~/.config/hypr/alacritty/alacritty.toml -o 'font.size=12' -e htop"
+    },
+    // GPU
+    "custom/gpu": {
+        "exec": "cat /sys/class/drm/card1/device/gpu_busy_percent",
+        "interval": 5,
+        "format": "󰢮 {}%",
+        "tooltip": false,
+        "on-click": "alacritty --class alacritty-float --config-file ~/.config/hypr/alacritty/alacritty.toml -o 'font.size=12' -e htop"
+    },
+    // VRAM
+    "custom/vram": {
+        "exec": "awk '{printf \"%.1f\", $1/1024/1024/1024}' /sys/class/drm/card1/device/mem_info_vram_used",
+        "interval": 10,
+        "format": "󰘚 {}G",
+        "tooltip": false,
+        "on-click": "alacritty --class alacritty-float --config-file ~/.config/hypr/alacritty/alacritty.toml -o 'font.size=12' -e htop"
+    },
+    // Separator
+    "custom/sep": {
+        "format": "|",
+        "tooltip": false
+    },
+    // Memory
+    "memory": {
+        "interval": 10,
+        "format": "󰘚 {used:0.1f}G",
+        "states": {
+            "warn": 75,
+            "crit": 90
+        },
+        "on-click": "alacritty --class alacritty-float --config-file ~/.config/hypr/alacritty/alacritty.toml -o 'font.size=12' -e htop"
+    },
+    // Disk
+    "disk": {
+        "interval": 30,
+        "path": "/",
+        "format": "󰋊 {free}",
+        "states": {
+            "warn": 80,
+            "crit": 90
+        },
+        "on-click": "~/.config/hypr/scripts/rofi_disk"
+    },
+    // Temperature
+    "temperature": {
+        "hwmon-path": "/sys/class/hwmon/hwmon5/temp1_input",
+        "format": "󰔏 {temperatureC}°C",
+        "critical-threshold": 85,
+        "on-click": "~/.config/hypr/scripts/rofi_sensors"
+    },
+    // Network
+    "network": {
+        "format-wifi": "󰤨 {essid}",
+        "format-ethernet": "󰈀 Connected",
+        "format-disconnected": "⚠ Disconnected",
+        "tooltip-format": "{ifname} via {gwaddr}",
+        "tooltip-format-wifi": "{essid}\nIP: {ipaddr}\nGW: {gwaddr}\nSignal: {signalStrength}%",
+        "tooltip-format-ethernet": "{ifname}\nIP: {ipaddr}\nGW: {gwaddr}",
+        "on-click": "~/.local/bin/costa-utils --network-menu"
+    },
+    // Pulseaudio
+    "pulseaudio": {
+        "format": "{icon} {volume}%",
+        "format-muted": "󰝟 Muted",
+        "format-icons": {
+            "headphone": "󰋋",
+            "hands-free": "󰋎",
+            "headset": "󰋎",
+            "default": [
+                "󰕿",
+                "󰖀",
+                "󰕾"
+            ]
+        },
+        "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+        "on-click-right": "~/.local/bin/costa-utils --volume-menu",
+        "on-scroll-up": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%+",
+        "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%-",
+        "smooth-scrolling-threshold": 1
+    },
+    // MPRIS (Universal Media Player)
+    "mpris": {
+        "format": "{player_icon} {title}",
+        "format-paused": "{status_icon} <i>{title}</i>",
+        "player-icons": {
+            "default": "<span>▶</span>",
+            "spotify": "<span></span>",
+            "firefox": "<span></span>",
+            "chromium": "<span></span>"
+        },
+        "status-icons": {
+            "paused": "<span>⏸</span>"
+        },
+        "max-length": 40,
+        "tooltip-format": "{player} ({status}): {artist} - {title}",
+        "on-click": "playerctl play-pause",
+        "on-click-right": "playerctl next",
+        "on-click-middle": "playerctl previous",
+        "on-scroll-up": "playerctl position 10+",
+        "on-scroll-down": "playerctl position 10-",
+        "interval": 3
+    },
+    // Updates (Fedora/dnf)
+    "custom/updates": {
+        "exec": "~/.config/hypr/scripts/check_updates",
+        "interval": 1800,
+        "format": "󰚰 {}",
+        "return-type": "json",
+        "on-click": "~/.config/hypr/scripts/alacritty -f -e bash -lc 'sudo dnf upgrade'"
+    },
+    // Idle Inhibitor
+    "idle_inhibitor": {
+        "format": "{icon} ",
+        "format-icons": {
+            "activated": "󰅶",
+            "deactivated": "󰾪"
+        }
+    },
+    // Bluetooth
+    "bluetooth": {
+        "format": "󰂯",
+        "format-connected": "󰂱 {device_alias}",
+        "format-disabled": "",
+        "on-click": "~/.local/bin/costa-utils --bluetooth-menu",
+        "tooltip-format-connected": "{device_enumerate}"
+    },
+    // Custom Menu
+    "custom/menu": {
+        "format": "",
+        "on-click": "~/.local/bin/costa-utils --app-menu",
+        "tooltip": false
+    },
+    // Custom Power
+    "custom/power": {
+        "format": "󰐥",
+        "on-click": "~/.local/bin/costa-utils --power-menu",
+        "tooltip": false
+    },
+    // Clipboard History
+    "custom/clipboard": {
+        "format": "󰅌",
+        "on-click": "~/.local/bin/costa-utils --clipper",
+        "tooltip": false
+    },
+    // Screenshot
+    "custom/screenshot": {
+        "format": "󰄀",
+        "on-click": "~/.local/bin/costa-utils --blinker",
+        "tooltip": false
+    }
+}
