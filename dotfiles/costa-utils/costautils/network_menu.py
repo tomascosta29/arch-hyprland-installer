@@ -46,7 +46,7 @@ class NetworkWindow(Adw.ApplicationWindow):
         return True
 
     def on_is_active_changed(self, window, pspec):
-        if not self.get_active() and not self.connecting:
+        if not self.is_active() and not self.connecting:
             self.hide()
 
     def build_ui(self):

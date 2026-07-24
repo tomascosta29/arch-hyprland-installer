@@ -51,7 +51,7 @@ class ControlCenterWindow(Adw.ApplicationWindow):
         return True
 
     def on_is_active_changed(self, window, pspec):
-        if not self.get_active():
+        if not self.is_active():
             self.stop_media_monitor()
             self.hide()
 
