@@ -397,7 +397,8 @@ class BlinkerLauncher(Adw.ApplicationWindow):
         return True
 
     def on_is_active_changed(self, window, pspec):
-        if not self.is_active():
+        is_act = self.is_active() if hasattr(self, "is_active") else self.get_property("is-active")
+        if not is_act:
             self.hide()
 
 class BlinkerApp(Adw.Application):
