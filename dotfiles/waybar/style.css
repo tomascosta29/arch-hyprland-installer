@@ -1,43 +1,49 @@
-/* ==============================================================================
-   Waybar Catppuccin Macchiato Stylesheet
-   ============================================================================== */
-
+/* ~/.config/waybar/style.css */
 * {
     border: none;
     border-radius: 0;
-    font-family: "JetBrainsMono Nerd Font", "DejaVuSansM Nerd Font", Monospace;
-    font-size: 13px;
+    font-family: "DejaVuSansM Nerd Font", Monospace;
+    font-size: 14px;
     min-height: 0;
 }
 
 window#waybar {
-    background-color: rgba(30, 30, 46, 0.85);
+    background-color: rgba(43, 48, 69, 0.8);
     color: #cdd6f4;
     transition-property: background-color;
     transition-duration: .5s;
 }
 
+window#waybar.hidden {
+    opacity: 0.2;
+}
+
 #workspaces button {
-    padding: 0 8px;
+    padding: 0 5px;
     background-color: transparent;
     color: #a6adc8;
 }
 
 #workspaces button:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
 }
 
-#workspaces button.active {
-    background-color: #89b4fa;
-    color: #1e1e2e;
-    border-radius: 6px;
+#workspaces button.focused {
+    background-color: #45475a;
+    color: #cdd6f4;
 }
 
 #workspaces button.urgent {
     background-color: #f38ba8;
     color: #1e1e2e;
-    border-radius: 6px;
+}
+
+#mode {
+    background-color: #f9e2af;
+    color: #1e1e2e;
+    padding: 0 8px;
+    margin: 4px 0px;
+    border-radius: 5px;
 }
 
 #clock,
@@ -49,47 +55,50 @@ window#waybar {
 #backlight,
 #network,
 #pulseaudio,
-#wireplumber,
 #custom-media,
 #tray,
 #mode,
 #idle_inhibitor,
-#scratchpad,
 #mpd {
     padding: 0 10px;
+    margin: 0 2px;
     color: #cdd6f4;
-    background-color: #313244;
-    margin: 4px 2px;
-    border-radius: 6px;
 }
 
-#window {
-    font-weight: bold;
-    color: #89b4fa;
+#window,
+#workspaces {
+    margin: 0 4px;
 }
 
 #pulseaudio {
-    background-color: #a6e3a1;
-    color: #11111b;
+    color: #89b4fa;
+}
+
+#pulseaudio.muted {
+    color: #f5c2e7;
 }
 
 #network {
-    background-color: #89b4fa;
-    color: #11111b;
+    color: #a6e3a1;
+}
+
+#network.disconnected {
+    color: #f38ba8;
 }
 
 #cpu {
-    background-color: #f9e2af;
-    color: #11111b;
+    color: #f5c2e7;
 }
 
 #memory {
-    background-color: #cba6f7;
-    color: #11111b;
+    color: #fab387;
 }
 
 #clock {
-    background-color: #89dceb;
-    color: #11111b;
-    font-weight: bold;
+    color: #b4befe;
+}
+
+#tray {
+    background-color: transparent;
+    margin-right: 5px;
 }
