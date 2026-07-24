@@ -248,7 +248,7 @@
     // Custom Menu
     "custom/menu": {
         "format": "󰣇",
-        "on-click": "rofi -show drun",
+        "on-click": "costa-utils --app-menu",
         "tooltip": false
     },
     // Custom Power
