@@ -64,9 +64,12 @@ fi
 echo -e "\n${GREEN}[1/6] Partitioning disk ${DISK}...${NC}"
 sfdisk "${DISK}" <<EOF
 label: gpt
-size=1G, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
-type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
+size=1G, type=uefi
+type=linux
 EOF
+
+# Ensure kernel registers new partitions
+partprobe "${DISK}" 2>/dev/null || udevadm settle
 
 echo -e "\n${GREEN}[2/6] Formatting partitions...${NC}"
 mkfs.fat -F32 "${PART_EFI}"
@@ -82,6 +85,7 @@ pacstrap -K /mnt \
     qemu-guest-agent spice-vdagent \
     grub efibootmgr os-prober \
     hyprland waybar kitty rofi-wayland dunst polkit-kde-agent \
+    xdg-desktop-portal-hyprland xdg-desktop-portal-gtk \
     pipewire pipewire-audio pipewire-pulse pipewire-alsa wireplumber pavucontrol \
     ttf-jetbrains-mono-nerd ttf-font-awesome grim slurp wl-clipboard sddm
 
@@ -124,10 +128,8 @@ echo "${USERNAME}:${USER_PASS}" | chpasswd
 echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/10-wheel
 chmod 440 /etc/sudoers.d/10-wheel
 
-# Fix Ownership of Dotfiles
-if [[ -d "/home/${USERNAME}/.config" ]]; then
-    chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}"
-fi
+# Fix Ownership of User Home Directory
+chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}"
 
 # Install GRUB EFI & Enable OS-Prober
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
