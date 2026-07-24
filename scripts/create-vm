@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Create the standard Arch installer VM and boot it from an ISO.
+
+set -Eeuo pipefail
+
+if (($# != 1)); then
+    printf 'Usage: %s /path/to/archlinux.iso\n' "${0##*/}" >&2
+    exit 2
+fi
+
+readonly ISO_PATH="$(realpath -- "$1")"
+[[ -f "${ISO_PATH}" ]] || {
+    printf 'Error: ISO not found: %s\n' "${ISO_PATH}" >&2
+    exit 1
+}
+
+command -v virt-install >/dev/null 2>&1 || {
+    printf 'Error: virt-install is not installed.\n' >&2
+    exit 1
+}
+
+virt-install \
+    --connect qemu:///system \
+    --name archlinux \
+    --memory 8192 \
+    --vcpus 4 \
+    --cpu host-passthrough \
+    --machine q35 \
+    --boot uefi,firmware.feature0.name=secure-boot,firmware.feature0.enabled=no \
+    --disk pool=default,size=40,format=qcow2,bus=virtio \
+    --cdrom "${ISO_PATH}" \
+    --osinfo archlinux \
+    --network network=default,model=virtio \
+    --graphics spice \
+    --video virtio \
+    --channel spicevmc \
+    --channel unix,target.type=virtio,target.name=org.qemu.guest_agent.0 \
+    --noautoconsole
+
+printf 'VM created. Open virt-manager and connect to "archlinux".\n'

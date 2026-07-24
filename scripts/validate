@@ -8,6 +8,7 @@ cd "${REPOSITORY_ROOT}"
 
 bash_files=(
     install.sh
+    scripts/create-vm
     scripts/deploy-user
     dotfiles/scripts/*
     dotfiles/costa-utils/uninstall.sh

@@ -79,6 +79,15 @@ The expected libvirt guest is named `archlinux`, uses `qemu:///system`, UEFI,
 8 GiB RAM, four host-passthrough vCPUs, and a disk of at least 40 GiB. Attach a
 VirtIO graphics device plus a SPICE display if desktop integration is wanted.
 
+Create that VM and attach an Arch ISO with:
+
+```bash
+./scripts/create-vm ~/Downloads/archlinux-x86_64.iso
+```
+
+The script disables Secure Boot, starts the VM, and leaves all installation,
+testing, and cleanup to you.
+
 The installed `qemu-guest-agent` and `spice-vdagent` packages allow host-side
 inspection and clipboard/display integration. On bare metal, their absence of a
 VirtIO/SPICE channel is harmless.
