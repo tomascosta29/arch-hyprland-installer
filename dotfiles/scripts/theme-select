@@ -131,8 +131,11 @@ atomic_install "${TARGET_THEME}/wallpaper.png" \
 
 hyprpaper_temp="$(mktemp "${CONFIG_DIR}/hypr/.hyprpaper.conf.XXXXXX")"
 cat > "${hyprpaper_temp}" <<HYPRPAPER
-preload = ${CONFIG_DIR}/hypr/current_wallpaper.png
-wallpaper = , ${CONFIG_DIR}/hypr/current_wallpaper.png
+wallpaper {
+    monitor =
+    path = ${CONFIG_DIR}/hypr/current_wallpaper.png
+    fit_mode = cover
+}
 splash = false
 HYPRPAPER
 chmod 0644 "${hyprpaper_temp}"

@@ -166,6 +166,21 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("source = ~/.config/hypr/current_lock.conf", lock)
         self.assertIn("path = $lock_wallpaper", lock)
 
+    def test_theme_select_uses_current_hyprpaper_syntax(self):
+        selector = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "theme-select").read_text()
+        self.assertIn("wallpaper {", selector)
+        self.assertIn("fit_mode = cover", selector)
+        self.assertNotIn("preload =", selector)
+
+    def test_waybar_css_avoids_unsupported_gtk_properties(self):
+        style = (REPOSITORY_ROOT / "dotfiles" / "waybar" / "style.css").read_text()
+        self.assertNotIn("font-variant-numeric", style)
+
+    def test_vm_profile_enables_virtio_3d(self):
+        creator = (REPOSITORY_ROOT / "scripts" / "create-vm").read_text()
+        self.assertIn("gl.enable=yes", creator)
+        self.assertIn("model.acceleration.accel3d=yes", creator)
+
     def test_sddm_theme_metadata_exists(self):
         theme_dir = REPOSITORY_ROOT / "dotfiles" / "sddm" / "costa"
         self.assertTrue((theme_dir / "Main.qml").is_file())

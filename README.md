@@ -76,8 +76,9 @@ Remove the ISO and reboot after the success message.
 ## VM profile
 
 The expected libvirt guest is named `archlinux`, uses `qemu:///system`, UEFI,
-8 GiB RAM, four host-passthrough vCPUs, and a disk of at least 40 GiB. Attach a
-VirtIO graphics device plus a SPICE display if desktop integration is wanted.
+8 GiB RAM, four host-passthrough vCPUs, and a disk of at least 40 GiB. It uses
+3D-accelerated VirtIO graphics with a local OpenGL SPICE display, which Hyprland
+requires in a VM.
 
 Create that VM and attach an Arch ISO with:
 
