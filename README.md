@@ -205,7 +205,7 @@ journalctl --user -b --no-pager
 - `dotfiles/waybar` — bar config, modules, and style.
 - `dotfiles/costa-utils` — GTK4 desktop utility suite.
 - `tests` — unit and repository-invariant tests.
-- `ISSUES.md` — the original exhaustive audit that drove the repair order.
+- `POLISH.md` — an expert review of the remaining runtime and architecture work.
 
 Wallpaper provenance is recorded in [ASSETS.md](ASSETS.md). Code licensing still
 needs an explicit decision from the repository owner before public redistribution.
