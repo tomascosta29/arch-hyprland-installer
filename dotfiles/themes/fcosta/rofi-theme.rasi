@@ -1,0 +1,13 @@
+* {
+    bg-col:       #192330;
+    bg-col-light: #212e3f;
+    border-col:   #719cd6;
+    selected-col: #29394f;
+    blue:         #719cd6;
+    fg-col:       #cdcecf;
+    fg-col2:      #c94f6d;
+    grey:         #738091;
+
+    width: 600;
+    font: "DejaVuSansM Nerd Font 11";
+}

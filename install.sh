@@ -131,8 +131,8 @@ chmod 440 /etc/sudoers.d/10-wheel
 # Fix Ownership of User Home Directory
 chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}"
 
-# Apply Default Theme (Catppuccin Macchiato)
-su - "${USERNAME}" -c "chmod +x ~/.config/scripts/theme-select && ~/.config/scripts/theme-select catppuccin-macchiato" || true
+# Apply Default Theme (fcosta Nordfox)
+su - "${USERNAME}" -c "chmod +x ~/.config/scripts/theme-select && ~/.config/scripts/theme-select fcosta" || true
 
 # Install GRUB EFI & Enable OS-Prober
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB

@@ -1,0 +1,19 @@
+/** ********** Nordfox Palette ********** **/
+@define-color background #192330;
+@define-color background-alt1 #212E3F;
+@define-color background-alt2 #29394F;
+@define-color background-alt3 #39506D;
+@define-color background-alt4 #4F6B95;
+@define-color foreground #CDCECF;
+@define-color foreground-dim #738091;
+
+/* Semantic accent colors */
+@define-color soft-blue #719CD6;
+@define-color soft-blue-bright #86ABDC;
+@define-color soft-cyan #63CDCF;
+@define-color soft-green #81B29A;
+@define-color soft-yellow #DBC074;
+@define-color soft-peach #F4A261;
+@define-color soft-lavender #9D79D6;
+@define-color soft-red #C94F6D;
+@define-color soft-grey #61758A;

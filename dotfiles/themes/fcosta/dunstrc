@@ -1,0 +1,33 @@
+[global]
+    font = "DejaVuSansM Nerd Font 10"
+    format = "<b>%s</b>\n%b"
+    sort = yes
+    indicate_hidden = yes
+    alignment = left
+    show_age_threshold = 60
+    word_wrap = yes
+    geometry = "300x5-30+50"
+    transparency = 10
+    idle_threshold = 120
+    monitor = 0
+
+    frame_width = 2
+    corner_radius = 8
+    frame_color = "#719cd6"
+    separator_color = frame
+
+[urgency_low]
+    background = "#192330"
+    foreground = "#cdcecf"
+    timeout = 5
+
+[urgency_normal]
+    background = "#212e3f"
+    foreground = "#cdcecf"
+    timeout = 8
+
+[urgency_critical]
+    background = "#c94f6d"
+    foreground = "#192330"
+    frame_color = "#f4a261"
+    timeout = 0
