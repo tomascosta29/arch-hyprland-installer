@@ -3,6 +3,11 @@ import os
 import signal
 import sys
 
+# GTK prefers Vulkan when it is available. On VirtIO-only guests, the installed
+# AMD ICD cannot own the virtual GPU, so use GTK's OpenGL renderer instead.
+if not os.path.isdir("/sys/module/amdgpu"):
+    os.environ.setdefault("GSK_RENDERER", "gl")
+
 import gi
 
 gi.require_version("Gtk", "4.0")
