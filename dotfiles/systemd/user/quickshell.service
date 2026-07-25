@@ -1,7 +1,8 @@
 [Unit]
 Description=Costa Quickshell desktop bar
 PartOf=hyprland-session.target
-After=hyprland-session.target
+Requires=costa-utils.service
+After=hyprland-session.target costa-utils.service
 
 [Service]
 Type=simple

@@ -1,6 +1,7 @@
 //@ pragma UseQApplication
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import QtQuick
 
 Scope {
@@ -78,6 +79,7 @@ Scope {
             implicitHeight: Colors.barHeight
             exclusiveZone: Colors.barHeight
             color: "transparent"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
             Bar {
                 anchors.centerIn: parent

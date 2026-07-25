@@ -1,6 +1,6 @@
-//! Shared popup lifecycle: claim focus, Esc, hide-on-close, and focus-loss dismiss.
+//! Shared modal popup lifecycle with explicit backdrop-click dismissal.
 
-use crate::focus_guard::{FocusLossGuard, LAUNCH_GESTURE_MS};
+use crate::focus_guard::FocusLossGuard;
 use adw::prelude::*;
 use glib::clone;
 use gtk4::{gdk, glib};
@@ -10,7 +10,10 @@ use std::sync::OnceLock;
 use std::time::Instant;
 use tracing::{debug, info};
 
-pub fn install_popup_dismiss(window: &adw::ApplicationWindow, focus_guard: Rc<RefCell<FocusLossGuard>>) {
+pub fn install_popup_dismiss(
+    window: &adw::ApplicationWindow,
+    _focus_guard: Rc<RefCell<FocusLossGuard>>,
+) {
     let key = gtk4::EventControllerKey::new();
     key.connect_key_pressed(clone!(
         #[weak]
@@ -34,90 +37,89 @@ pub fn install_popup_dismiss(window: &adw::ApplicationWindow, focus_guard: Rc<Re
         win.set_visible(false);
         glib::Propagation::Stop
     });
-
-    window.connect_notify_local(
-        Some("is-active"),
-        clone!(
-            #[strong]
-            focus_guard,
-            #[weak]
-            window,
-            move |win, _| {
-                info!(title = ?win.title(), active = win.is_active(), "popup activation changed");
-                if !focus_guard.borrow_mut().should_hide(win.is_active()) {
-                    return;
-                }
-                let gen = focus_guard.borrow().generation.get();
-                let focus_guard = focus_guard.clone();
-                // Confirm at the next idle turn. A transient inactive→active
-                // pair in the same compositor update invalidates this check,
-                // while genuine outside clicks close without a visible delay.
-                glib::idle_add_local_once(
-                    clone!(
-                        #[weak]
-                        window,
-                        #[strong]
-                        focus_guard,
-                        move || {
-                            if focus_guard.borrow().generation.get() != gen {
-                                return;
-                            }
-                            if window.is_visible()
-                                && focus_guard.borrow_mut().should_hide(window.is_active())
-                            {
-                                info!(
-                                    title = ?window.title(),
-                                    reason = "focus-loss",
-                                    "popup dismissed"
-                                );
-                                window.set_visible(false);
-                            }
-                        }
-                    ),
-                );
-            }
-        ),
-    );
-
-    window.connect_notify_local(
-        Some("visible"),
-        clone!(
-            #[strong]
-            focus_guard,
-            move |win, _| {
-                focus_guard.borrow_mut().visibility_changed(win.is_visible());
-            }
-        ),
-    );
 }
 
-pub fn present_popup(window: &adw::ApplicationWindow, focus_guard: &RefCell<FocusLossGuard>) {
+pub fn present_popup(window: &adw::ApplicationWindow, _focus_guard: &RefCell<FocusLossGuard>) {
     info!(title = ?window.title(), "popup presented");
-    focus_guard.borrow_mut().presented();
+    install_modal_backdrop(window);
     sync_popup_size(window);
     install_size_logger(window);
+    if let Some(backdrop) =
+        unsafe { window.data::<adw::ApplicationWindow>("costa-modal-backdrop") }
+    {
+        unsafe { backdrop.as_ref() }.maximize();
+        unsafe { backdrop.as_ref() }.present();
+    }
     window.present();
-    // A bar click can return focus on button-release after the surface maps.
-    // Reclaim it once when that launch gesture is over; later focus loss is a
-    // genuine outside interaction and dismisses normally.
-    glib::timeout_add_local_once(
-        std::time::Duration::from_millis(LAUNCH_GESTURE_MS),
-        clone!(
-            #[weak]
-            window,
-            move || {
-                if window.is_visible() && !window.is_active() {
-                    window.present();
-                }
-            }
-        ),
-    );
 }
 
-/// Measure content and pin default + size-request to the final natural size
-/// *before* the first mapped frame. Undersized defaults (e.g. 480×420 for a
-/// 584×524 power menu) otherwise map, grow, and get re-centered by Hyprland —
-/// which looks like a different window swapping in.
+/// Create a separate workspace-sized surface behind the compact popup. Keeping
+/// the popup in its own toplevel preserves its original GTK allocation and CSS.
+fn install_modal_backdrop(window: &adw::ApplicationWindow) {
+    if unsafe {
+        window
+            .data::<adw::ApplicationWindow>("costa-modal-backdrop")
+            .is_some()
+    } {
+        return;
+    }
+
+    let Some(application) = window.application() else {
+        return;
+    };
+
+    let backdrop = adw::ApplicationWindow::builder()
+        .application(&application)
+        .title("Costa Modal Backdrop")
+        .decorated(false)
+        .resizable(true)
+        .build();
+    backdrop.add_css_class("costa-modal-backdrop-window");
+
+    let click_target = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    click_target.set_hexpand(true);
+    click_target.set_vexpand(true);
+    backdrop.set_content(Some(&click_target));
+
+    let click = gtk4::GestureClick::new();
+    click.connect_released(clone!(
+        #[weak]
+        window,
+        move |_, _, _, _| {
+            info!(title = ?window.title(), reason = "backdrop-click", "popup dismissed");
+            window.set_visible(false);
+        }
+    ));
+    click_target.add_controller(click);
+
+    backdrop.connect_close_request(clone!(
+        #[weak]
+        window,
+        #[upgrade_or]
+        glib::Propagation::Proceed,
+        move |backdrop| {
+            window.set_visible(false);
+            backdrop.set_visible(false);
+            glib::Propagation::Stop
+        }
+    ));
+    window.connect_visible_notify(clone!(
+        #[weak]
+        backdrop,
+        move |popup| {
+            if !popup.is_visible() {
+                backdrop.set_visible(false);
+            }
+        }
+    ));
+    window.set_transient_for(Some(&backdrop));
+    install_modal_css();
+    unsafe {
+        window.set_data("costa-modal-backdrop", backdrop);
+    }
+}
+
+/// Measure and pin the compact popup before its first mapped frame.
 fn sync_popup_size(window: &adw::ApplicationWindow) {
     gtk4::prelude::WidgetExt::realize(window);
     if let Some(content) = window.content() {
@@ -129,6 +131,27 @@ fn sync_popup_size(window: &adw::ApplicationWindow) {
     let height = natural.height().max(default_h).max(1);
     window.set_default_size(width, height);
     window.set_size_request(width, height);
+}
+
+fn install_modal_css() {
+    static LOADED: std::sync::Once = std::sync::Once::new();
+    LOADED.call_once(|| {
+        let provider = gtk4::CssProvider::new();
+        provider.load_from_string(
+            r#"
+            window.costa-modal-backdrop-window {
+                background: alpha(black, 0.16);
+            }
+            "#,
+        );
+        if let Some(display) = gdk::Display::default() {
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_USER,
+            );
+        }
+    });
 }
 
 fn debug_size_enabled() -> bool {

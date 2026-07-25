@@ -647,6 +647,30 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("SyslogIdentifier=costa-utils", service)
         self.assertIn("Wants=costa-utils.service", target)
         self.assertIn('"--daemon"', cli)
+        deployer = (REPOSITORY_ROOT / "scripts" / "deploy-user").read_text()
+        self.assertIn(
+            "systemctl --user start costa-utils.service quickshell.service",
+            deployer,
+        )
+        self.assertIn("systemctl --user stop costa-utils.service", deployer)
+        self.assertGreater(
+            deployer.rindex(
+                "systemctl --user start costa-utils.service quickshell.service"
+            ),
+            deployer.index('"${CONFIG_DIR}/scripts/theme-select"'),
+        )
+        quickshell = (
+            REPOSITORY_ROOT / "dotfiles" / "systemd" / "user" / "quickshell.service"
+        ).read_text()
+        self.assertIn("Requires=costa-utils.service", quickshell)
+        self.assertIn("After=hyprland-session.target costa-utils.service", quickshell)
+
+    def test_quickshell_bar_never_takes_keyboard_focus(self):
+        shell = (
+            REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa" / "shell.qml"
+        ).read_text()
+        self.assertIn("import Quickshell.Wayland", shell)
+        self.assertIn("WlrLayershell.keyboardFocus: WlrKeyboardFocus.None", shell)
 
     def test_costa_utils_uses_gl_fallback_without_amdgpu(self):
         launcher = (

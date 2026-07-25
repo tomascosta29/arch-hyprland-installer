@@ -74,7 +74,12 @@ remove_previous_manifest() {
 [[ -d "${REPOSITORY_ROOT}/dotfiles/themes/${THEME}" ]] ||
     die "Theme '${THEME}' does not exist."
 
-# Stop the old singleton before replacing code it has imported.
+# Stop the supervised process before replacing its executable, then shut down
+# any legacy launcher-owned singleton that may still hold the D-Bus name.
+if [[ "${RELOAD_DESKTOP}" == 1 ]] &&
+    systemctl --user cat costa-utils.service >/dev/null 2>&1; then
+    systemctl --user stop costa-utils.service
+fi
 if [[ "${RELOAD_DESKTOP}" == 1 && -x "${BIN_DIR}/costa-utils" ]]; then
     "${BIN_DIR}/costa-utils" --shutdown >/dev/null 2>&1 || true
 fi
@@ -132,6 +137,7 @@ if [[ "${RELOAD_DESKTOP}" == 1 ]] && pgrep -x Hyprland >/dev/null; then
 fi
 if [[ "${RELOAD_DESKTOP}" == 1 ]]; then
     systemctl --user daemon-reload
+    systemctl --user start costa-utils.service quickshell.service
 fi
 
 if [[ -f "${STATE_DIR}/install-profile" ]]; then
@@ -162,6 +168,11 @@ fi
 
 COSTA_THEME_RELOAD="${RELOAD_DESKTOP}" \
     "${CONFIG_DIR}/scripts/theme-select" "${THEME}"
+if [[ "${RELOAD_DESKTOP}" == 1 ]]; then
+    # Theme application intentionally shuts down GTK clients so they reload
+    # providers; restore the supervised resident only after that final stop.
+    systemctl --user start costa-utils.service quickshell.service
+fi
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "${DATA_DIR}/applications"
 fi
