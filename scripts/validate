@@ -8,6 +8,7 @@ cd "${REPOSITORY_ROOT}"
 
 bash_files=(
     install.sh
+    bootstrap.sh
     scripts/build-release.sh
     scripts/create-vm
     scripts/deploy-user

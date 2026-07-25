@@ -66,8 +66,13 @@ To package these releases locally:
 
 ## Installation
 
-Boot the latest Arch installation ISO in UEFI mode, connect it to the network,
-and obtain this repository:
+Boot the latest Arch installation ISO in UEFI mode, connect it to the network, and run the single-command bootstrap installer:
+
+```bash
+curl -sL https://raw.githubusercontent.com/tomascosta29/arch-hyprland-installer/quickshell/bootstrap.sh | bash
+```
+
+Alternatively, if you prefer cloning the repository manually:
 
 ```bash
 pacman -Sy --needed git
