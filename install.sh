@@ -269,7 +269,7 @@ COMMON_PACKAGES=(
     gobject-introspection upower cliphist
     grim slurp wl-clipboard brightnessctl libnotify
     pacman-contrib htop lm_sensors man-db man-pages
-    jq curl pulseaudio-utils
+    jq curl libpulse
     ttf-jetbrains-mono-nerd otf-font-awesome
     noto-fonts noto-fonts-emoji noto-fonts-cjk papirus-icon-theme
 )

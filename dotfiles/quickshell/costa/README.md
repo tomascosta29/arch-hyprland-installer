@@ -14,7 +14,7 @@ Quickshell configuration shipped with the Arch Hyprland installer. Named shell
 ## Requirements
 
 - Quickshell 0.3 or newer (`pacman -S quickshell`)
-- Hyprland, `jq`, `git`, `procps-ng`, `pulseaudio-utils` (`pactl`), `iproute2`, `curl`
+- Hyprland, `jq`, `git`, `procps-ng`, `libpulse` (`pactl`), `iproute2`, `curl`
 - JetBrainsMono Nerd Font
 - `~/.local/bin/costa-utils` for launcher, clipboard, capture, control-center, network, Bluetooth, volume, and power
 
