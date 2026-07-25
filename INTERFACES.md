@@ -187,7 +187,7 @@ Window rule: class `^org\.fcosta\..*$` → float + center.
 
 ## 5. costa-utils CLI / D-Bus
 
-**Binary:** `~/.local/bin/costa-utils` (Rust release binary from `./costa-utils`)  
+**Binary:** `~/.local/bin/costa-utils` (Rust release binary from `./costa-utils`)
 **App id:** `org.fcosta.CostaUtils` (singleton; `--shutdown` quits for theme reload)
 
 ### Flags (dispatch surface)
