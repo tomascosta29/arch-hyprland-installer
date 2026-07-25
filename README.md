@@ -125,7 +125,7 @@ bare-metal profile.
 | `Super+Shift+M` | Exit Hyprland |
 
 Hyprland starts a user `hyprland-session.target`. Systemd then supervises
-Hyprpaper, Hypridle, Hyprsunset, Waybar, Dunst, the policy agent, and both
+Hyprpaper, Hypridle, Hyprsunset, Quickshell, Dunst, the policy agent, and both
 clipboard watchers with restart-on-failure behavior and stops them with the
 compositor. The power menu omits hibernate because the installer intentionally
 creates no swap. The Costa launcher hides duplicate utilities and non-Firefox
@@ -180,7 +180,7 @@ destructive installer:
 
 The deployer synchronizes an exact ownership manifest while preserving unowned
 user files, installs the user service graph and Costa Utils metadata, chooses a
-VM or bare-metal Waybar profile, applies the selected theme, and shuts down an
+VM or bare-metal Quickshell profile, applies the selected theme, and shuts down an
 old Costa Utils singleton through its application protocol. A currently running
 older session is migrated to the supervised target without waiting for logout.
 It does not alter system packages or partitions. For isolated staging tests,
@@ -237,11 +237,11 @@ journalctl --user -b --no-pager
 - `dotfiles/hypr` — Hyprland 0.55+ Lua configuration and component configs.
 - `dotfiles/systemd/user` — supervised graphical-session target and user units.
 - `dotfiles/themes` — complete theme bundles.
-- `dotfiles/waybar` — bar config, modules, and style.
+- `dotfiles/quickshell` — Quickshell `costa` bar (replaces Waybar).
 - `dotfiles/costa-utils` — GTK4 desktop utility suite.
 - `tests` — unit and repository-invariant tests.
 - `INTERFACES.md` — stable contracts between desktop components (theme packs,
-  Waybar, session, costa-utils CLI, deploy layout).
+  Quickshell, session, costa-utils CLI, deploy layout).
 - `POLISH.md` — the expert runtime/architecture review and implementation record.
 
 Wallpaper provenance is recorded in [ASSETS.md](ASSETS.md). Code licensing still

@@ -1,7 +1,10 @@
 [Unit]
+Description=Costa Quickshell desktop bar
 PartOf=hyprland-session.target
 After=hyprland-session.target
 
 [Service]
+Type=simple
+ExecStart=/usr/bin/qs -c costa
 Restart=on-failure
 RestartSec=1s

@@ -11,7 +11,7 @@ readonly STATE_DIR="${CONFIG_DIR}/costa"
 readonly MANIFEST_FILE="${STATE_DIR}/managed-files"
 readonly THEME="${1:-fcosta}"
 readonly RELOAD_DESKTOP="${COSTA_DEPLOY_RELOAD:-1}"
-readonly CONFIG_COMPONENTS=(dunst hypr kitty rofi scripts systemd themes waybar)
+readonly CONFIG_COMPONENTS=(dunst hypr kitty quickshell rofi scripts systemd themes)
 readonly RETIRED_CONFIG_FILES=(
     hypr/current_colors.conf
     hypr/hyprland.conf
@@ -22,6 +22,14 @@ readonly RETIRED_CONFIG_FILES=(
     themes/catppuccin-macchiato/colors.conf
     themes/fcosta/colors.conf
     themes/tokyo-night/colors.conf
+    waybar/colors.css
+    waybar/config.jsonc
+    waybar/modules
+    waybar/profile.jsonc
+    waybar/profile-bare-metal.jsonc
+    waybar/profile-vm.jsonc
+    waybar/style.css
+    waybar/user.jsonc
 )
 
 die() {
@@ -83,7 +91,8 @@ append_tree_manifest DATA "${REPOSITORY_ROOT}/dotfiles/costa-utils" "costa-utils
 printf '%s\n' \
     'DATA	applications/org.fcosta.CostaUtils.desktop' \
     'DATA	icons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg' \
-    'BIN	costa-utils' >> "${NEW_MANIFEST}"
+    'BIN	costa-utils' \
+    'BIN	qs-activity' >> "${NEW_MANIFEST}"
 
 # Remove only paths recorded by an earlier deployment. Files created by the
 # user outside that ownership manifest are never considered stale.
@@ -110,6 +119,7 @@ cp -a "${REPOSITORY_ROOT}/dotfiles/costa-utils/." \
 find "${DATA_DIR}/costa-utils" -type d -name __pycache__ -prune \
     -exec rm -rf -- {} +
 ln -sfn "../share/costa-utils/costa_utils.py" "${BIN_DIR}/costa-utils"
+ln -sfn "${CONFIG_DIR}/quickshell/costa/scripts/qs-activity" "${BIN_DIR}/qs-activity"
 cp -a \
     "${REPOSITORY_ROOT}/dotfiles/costa-utils/applications/org.fcosta.CostaUtils.desktop" \
     "${DATA_DIR}/applications/"
@@ -118,6 +128,7 @@ cp -a "${REPOSITORY_ROOT}/dotfiles/costa-utils/icons/costa_utils.svg" \
 cp -a "${REPOSITORY_ROOT}/dotfiles/mimeapps.list" "${CONFIG_DIR}/mimeapps.list"
 
 find "${CONFIG_DIR}/scripts" -type f -exec chmod 0755 {} +
+find "${CONFIG_DIR}/quickshell/costa/scripts" -type f -exec chmod 0755 {} +
 chmod 0755 \
     "${DATA_DIR}/costa-utils/costa_utils.py" \
     "${DATA_DIR}/costa-utils/uninstall.sh"
@@ -141,15 +152,15 @@ elif command -v systemd-detect-virt >/dev/null 2>&1 &&
 else
     INSTALL_PROFILE=bare-metal
 fi
-COSTA_WAYBAR_RELOAD="${RELOAD_DESKTOP}" \
-    "${CONFIG_DIR}/scripts/waybar-profile" "${INSTALL_PROFILE}"
+COSTA_QUICKSHELL_RELOAD="${RELOAD_DESKTOP}" \
+    "${CONFIG_DIR}/scripts/quickshell-profile" "${INSTALL_PROFILE}"
 
 # Migrate a currently running pre-systemd session without waiting for logout.
 if [[ "${RELOAD_DESKTOP}" == 1 ]] && pgrep -x Hyprland >/dev/null; then
     if systemctl --user cat hyprland-session.target >/dev/null 2>&1 &&
         ! systemctl --user is-active --quiet hyprland-session.target; then
         for legacy_process in \
-            dunst hypridle hyprpaper hyprsunset spice-vdagent waybar; do
+            dunst hypridle hyprpaper hyprsunset spice-vdagent waybar quickshell qs; do
             pkill -x "${legacy_process}" >/dev/null 2>&1 || true
         done
         pkill -f -- \

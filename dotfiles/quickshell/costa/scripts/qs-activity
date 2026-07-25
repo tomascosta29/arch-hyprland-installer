@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+send() {
+  quickshell ipc -c costa call -- activity "$@" >/dev/null
+}
+
+usage() {
+  printf '%s\n' \
+    'usage:' \
+    '  qs-activity update ID TITLE DETAIL PROGRESS [MONITOR] [PRIORITY]' \
+    '  qs-activity complete ID [DETAIL]' \
+    '  qs-activity fail ID [DETAIL]' \
+    '  qs-activity remove ID' \
+    '  qs-activity clear' \
+    '  qs-activity run ID TITLE MONITOR -- COMMAND [ARG...]'
+}
+
+action="${1:-}"
+case "${action}" in
+  update)
+    (( $# >= 5 )) || { usage >&2; exit 2; }
+    send upsert "$2" "$3" "$4" "$5" "${6:-*}" "${7:-50}"
+    ;;
+  complete)
+    (( $# >= 2 )) || { usage >&2; exit 2; }
+    send complete "$2" "${3:-Complete}"
+    ;;
+  fail)
+    (( $# >= 2 )) || { usage >&2; exit 2; }
+    send fail "$2" "${3:-Failed}"
+    ;;
+  remove)
+    (( $# == 2 )) || { usage >&2; exit 2; }
+    send remove "$2"
+    ;;
+  clear)
+    send clear
+    ;;
+  run)
+    (( $# >= 6 )) || { usage >&2; exit 2; }
+    id="$2"
+    title="$3"
+    monitor="$4"
+    shift 4
+    [[ "${1:-}" == "--" ]] || { usage >&2; exit 2; }
+    shift
+
+    send upsert "${id}" "${title}" "Starting" -1 "${monitor}" 50 \
+      || printf 'warning: could not publish activity %s\n' "${id}" >&2
+    "$@" &
+    child_pid=$!
+    while kill -0 "${child_pid}" 2>/dev/null; do
+      send upsert "${id}" "${title}" "Running" -1 "${monitor}" 50 || true
+      sleep 3
+    done
+
+    if wait "${child_pid}"; then
+      send complete "${id}" "Finished" || true
+    else
+      status=$?
+      send fail "${id}" "Exited ${status}" || true
+      exit "${status}"
+    fi
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

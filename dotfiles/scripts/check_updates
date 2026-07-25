@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Return a Waybar JSON payload for pending Arch package updates.
+# Return a JSON payload for pending Arch package updates (legacy helper).
 
 set -Eeuo pipefail
 

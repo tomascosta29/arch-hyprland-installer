@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+read -r _ user nice system idle iowait irq softirq steal _ < /proc/stat
+total=$((user + nice + system + idle + iowait + irq + softirq + steal))
+idle_total=$((idle + iowait))
+
+memory="$(
+  awk '
+    /MemTotal/ { total = $2 }
+    /MemAvailable/ { available = $2 }
+    END { printf "%.1fG", (total - available) / 1024 / 1024 }
+  ' /proc/meminfo
+)"
+
+gpu=""
+for device in /sys/class/drm/card*/device; do
+  [[ -d "${device}" ]] || continue
+  driver="$(readlink -f "${device}/driver" 2>/dev/null || true)"
+  if [[ "${driver##*/}" == "amdgpu" && -r "${device}/gpu_busy_percent" ]]; then
+    read -r gpu < "${device}/gpu_busy_percent"
+    break
+  fi
+done
+[[ "${gpu}" =~ ^[0-9]+$ ]] && gpu="${gpu}%" || gpu="—"
+
+temperature=""
+for sensor in /sys/class/hwmon/hwmon*; do
+  [[ -r "${sensor}/name" ]] || continue
+  read -r sensor_name < "${sensor}/name"
+  [[ "${sensor_name}" == "k10temp" ]] || continue
+
+  for input in "${sensor}"/temp*_input; do
+    [[ -r "${input}" ]] || continue
+    label_file="${input%_input}_label"
+    label=""
+    [[ -r "${label_file}" ]] && read -r label < "${label_file}"
+    if [[ "${label}" == "Tctl" || -z "${temperature}" ]]; then
+      read -r temperature < "${input}"
+    fi
+    [[ "${label}" == "Tctl" ]] && break
+  done
+  [[ -n "${temperature}" ]] && break
+done
+
+if [[ ! "${temperature}" =~ ^[0-9]+$ ]]; then
+  for input in /sys/class/thermal/thermal_zone*/temp; do
+    [[ -r "${input}" ]] || continue
+    read -r temperature < "${input}"
+    [[ "${temperature}" =~ ^[0-9]+$ ]] && break
+  done
+fi
+
+[[ "${temperature}" =~ ^[0-9]+$ ]] && temperature="$((temperature / 1000))°" || temperature="—"
+
+jq -cn \
+  --argjson total "${total}" \
+  --argjson idle "${idle_total}" \
+  --arg mem "${memory}" \
+  --arg gpu "${gpu}" \
+  --arg temp "${temperature}" \
+  '{total: $total, idle: $idle, mem: $mem, gpu: $gpu, temp: $temp}'

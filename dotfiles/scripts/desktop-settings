@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Configure keyboard layout and Waybar clock format for the desktop user.
+# Configure keyboard layout and Quickshell clock format for the desktop user.
 
 set -Eeuo pipefail
 
 readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
 readonly SETTINGS_FILE="${CONFIG_DIR}/costa/desktop.env"
 readonly HYPR_INPUT_LUA="${CONFIG_DIR}/hypr/input.lua"
-readonly WAYBAR_USER="${CONFIG_DIR}/waybar/user.jsonc"
+readonly QUICKSHELL_USER="${CONFIG_DIR}/quickshell/costa/user.json"
 
 die() {
     printf 'Error: %s\n' "$1" >&2
@@ -17,7 +17,7 @@ usage() {
     cat <<'EOF'
 Usage: desktop-settings [--keyboard LAYOUT] [--clock 12h|24h] [--show]
 
-Configure Hyprland keyboard layout and Waybar clock formatting.
+Configure Hyprland keyboard layout and Quickshell clock formatting.
 Without flags, prompts interactively.
 EOF
 }
@@ -38,13 +38,7 @@ atomic_write() {
 write_settings() {
     local layout=$1
     local clock_format=$2
-    local waybar_format hypr_lua waybar_json
-
-    if [[ "${clock_format}" == "12h" ]]; then
-        waybar_format="{:%a %d %b %I:%M %p}"
-    else
-        waybar_format="{:%a %d %b %H:%M}"
-    fi
+    local hypr_lua quickshell_json
 
     atomic_write "${SETTINGS_FILE}" "$(cat <<EOF
 KB_LAYOUT=${layout}
@@ -71,24 +65,20 @@ EOF
 )"
     atomic_write "${HYPR_INPUT_LUA}" "${hypr_lua}"
 
-    waybar_json="$(cat <<EOF
+    quickshell_json="$(cat <<EOF
 {
-    "clock": {
-        "interval": 60,
-        "format": "${waybar_format}",
-        "tooltip-format": "<tt><small>{calendar}</small></tt>"
-    }
+    "clock_format": "${clock_format}"
 }
 EOF
 )"
-    atomic_write "${WAYBAR_USER}" "${waybar_json}"
+    atomic_write "${QUICKSHELL_USER}" "${quickshell_json}"
 
     if command -v hyprctl >/dev/null 2>&1 && pgrep -x Hyprland >/dev/null; then
         hyprctl reload >/dev/null 2>&1 || true
     fi
     if command -v systemctl >/dev/null 2>&1 &&
         systemctl --user is-active --quiet hyprland-session.target; then
-        systemctl --user try-reload-or-restart waybar.service \
+        systemctl --user try-reload-or-restart quickshell.service \
             >/dev/null 2>&1 || true
     fi
 

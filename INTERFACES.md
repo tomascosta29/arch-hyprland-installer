@@ -8,36 +8,36 @@ requires updating this file, the implementing script, and the repository tests.
 flowchart LR
   themePacks[Theme packs]
   themeSelect[theme-select]
-  waybar[Waybar]
+  quickshell[Quickshell]
   hypr[Hyprland plus session]
   costa[costa-utils]
   profiles[Profile scripts]
   deploy[install and deploy-user]
 
   themePacks --> themeSelect
-  themeSelect --> waybar
+  themeSelect --> quickshell
   themeSelect --> hypr
   themeSelect --> costa
-  profiles --> waybar
+  profiles --> quickshell
   profiles --> hypr
   deploy --> themeSelect
   deploy --> profiles
   deploy --> costa
-  hypr --> waybar
+  hypr --> quickshell
   hypr --> costa
-  waybar --> costa
+  quickshell --> costa
 ```
 
 ## 1. Theme pack schema
 
 **Provider:** `~/.config/themes/<name>/`  
-**Consumers:** `theme-select`, Waybar (via symlink), Hyprland, Kitty, Rofi, Dunst, GTK/Libadwaita, Hyprlock, Hyprpaper
+**Consumers:** `theme-select`, Quickshell (via `colors.css` symlink), Hyprland, Kitty, Rofi, Dunst, GTK/Libadwaita, Hyprlock, Hyprpaper
 
 ### Required files
 
 | Relative path | Consumer |
 |---|---|
-| `colors.css` | Waybar `@import` |
+| `colors.css` | Quickshell palette + SDDM seed colors |
 | `colors.lua` | Hyprland `require("current_colors")` |
 | `lock.conf` | Hyprlock via `current_lock.conf` |
 | `wallpaper.png` | Hyprpaper / Hyprlock |
@@ -46,13 +46,17 @@ flowchart LR
 | `rofi-theme.rasi` | Rofi |
 | `dunstrc` | Dunst |
 
-### Waybar CSS variables (`colors.css`)
+### Palette CSS variables (`colors.css`)
 
 Each pack must define these as `@define-color <name> #RRGGBB;`:
 
 - `background`, `background-alt1`, `background-alt2`, `background-alt3`, `background-alt4`
 - `foreground`, `foreground-dim`
 - `soft-blue`, `soft-cyan`, `soft-green`, `soft-yellow`, `soft-peach`, `soft-lavender`, `soft-red`, `soft-grey`
+
+Quickshell loads this file at runtime (`~/.config/quickshell/costa/colors.css`) and
+maps it into the `Colors` singleton. There is no parallel Quickshell palette file
+in theme packs.
 
 ### Libadwaita surfaces (`gtk-4.0/gtk.css`)
 
@@ -89,7 +93,7 @@ atomically retargeted:
 | `hypr/current_colors.lua` | `colors.lua` |
 | `hypr/current_lock.conf` | `lock.conf` |
 | `hypr/current_wallpaper.png` | `wallpaper.png` |
-| `waybar/colors.css` | `colors.css` |
+| `quickshell/costa/colors.css` | `colors.css` |
 | `kitty/kitty-theme.conf` | `kitty-theme.conf` |
 | `rofi/rofi-theme.rasi` | `rofi-theme.rasi` |
 | `dunst/dunstrc` | `dunstrc` |
@@ -106,40 +110,43 @@ Does **not** mutate SDDM (`/usr/share`); that remains install-time only.
 
 ### Reload side effects (`COSTA_THEME_RELOAD=1`)
 
-`hyprctl reload` · restart `hyprpaper` · reload/restart `waybar` and `dunst` ·
+`hyprctl reload` · restart `hyprpaper` · reload/restart `quickshell` and `dunst` ·
 `SIGUSR1` to Kitty · `costa-utils --shutdown` · optional `notify-send`.
 
-## 3. Waybar
+## 3. Quickshell
 
-**Paths:** `~/.config/waybar/{config.jsonc,modules,profile.jsonc,user.jsonc,style.css,colors.css}`
+**Paths:** `~/.config/quickshell/costa/{shell.qml,Bar.qml,Colors.qml,colors.css,Profile.qml,profile.json,user.json,…}`
 
 ### Requires
 
 ```text
-Files:   modules, profile.jsonc, user.jsonc, style.css, colors.css
-Include: config.jsonc include = [modules, profile.jsonc, user.jsonc]
-Theme:   colors.css defines the Waybar CSS variable set (section 1)
-Profile: profile.jsonc supplies group/usage (vm vs bare-metal)
+Files:   shell.qml, Bar.qml, Colors.qml, colors.css, Profile.qml, profile.json, user.json
+Theme:   colors.css from theme-select (same CSS palette as theme packs)
+Profile: profile.json supplies role / primary_monitor / telemetry_gpu
+Clock:   user.json supplies clock_format (12h|24h)
 Binaries:
   ~/.local/bin/costa-utils with
     --app-menu | --power-menu | --network-menu | --bluetooth-menu
-    | --volume-menu | --clipper | --blinker
+    | --volume-menu | --clipper | --blinker | --control-center
+  ~/.local/bin/qs-activity → costa/scripts/qs-activity
 Scripts:
-  ~/.config/scripts/check_updates
-  ~/.config/scripts/amd-gpu-stat   (bare-metal profile only)
-Session: waybar.service PartOf=hyprland-session.target
+  costa/scripts/{system-telemetry,observatory-snapshot,weather,qs-activity}
+Session: quickshell.service PartOf=hyprland-session.target
+         ExecStart=/usr/bin/qs -c costa
 ```
 
 ### Profile contract
 
-- `waybar-profile bare-metal|vm` copies `profile-<name>.jsonc` → `profile.jsonc`
+- `quickshell-profile bare-metal|vm` copies `profile-<name>.json` → `profile.json`
 - Writes `~/.config/costa/install-profile`
-- VM profile must omit `custom/gpu`, `custom/vram`, and `temperature`
+- VM / single: `role=single`, empty `primary_monitor`, `telemetry_gpu=false`
+- Bare-metal: `role=dual-host`, `primary_monitor=HDMI-A-1`, `telemetry_gpu=true`
 
 ### Outputs
 
-None. Reloaded by `theme-select`, `desktop-settings`, `waybar-profile`, or
-`deploy-user` via `systemctl --user try-reload-or-restart waybar.service`.
+None. Reloaded by `theme-select`, `desktop-settings`, `monitor-select`,
+`quickshell-profile`, or `deploy-user` via
+`systemctl --user try-reload-or-restart quickshell.service`.
 
 ## 4. Hyprland and session target
 
@@ -156,11 +163,12 @@ require("input")           -- desktop-settings generated
 
 ### Session `Wants=`
 
-`dunst`, `hypridle`, `hyprpaper`, `hyprpolkitagent`, `hyprsunset`, `waybar`,
+`dunst`, `hypridle`, `hyprpaper`, `hyprpolkitagent`, `hyprsunset`, `quickshell`,
 `cliphist-image`, `cliphist-text` (plus graphical-session-pre / xdg-desktop-autostart).
 
 Hyprland starts the target after exporting Wayland/Hypr env to systemd, and
 stops it on shutdown. Desktop helpers are supervised here, not `exec`'d from Lua.
+A layer rule blurs the `quickshell` namespace.
 
 ### costa-utils binds
 
@@ -188,7 +196,7 @@ Window rule: class `^org\.fcosta\..*$` → float + center.
 `--power-menu`, `--network-menu`, `--bluetooth-menu`, `--volume-menu`,
 `--control-center`, `--shutdown`
 
-Waybar and Hyprland must only call flags from this set. Theme GTK styling is
+Quickshell and Hyprland must only call flags from this set. Theme GTK styling is
 loaded from `~/.config/gtk-4.0/gtk.css` (section 1); the app does not read theme
 packs directly.
 
@@ -203,22 +211,23 @@ packs directly.
 
 ## 6. Profile and settings scripts
 
-### `waybar-profile`
+### `quickshell-profile`
 
 - **CLI:** exactly one of `bare-metal` \| `vm`
-- **Writes:** `waybar/profile.jsonc`, `costa/install-profile`
-- **Env:** `COSTA_WAYBAR_RELOAD` ∈ `{0,1}`
+- **Writes:** `quickshell/costa/profile.json`, `costa/install-profile`
+- **Env:** `COSTA_QUICKSHELL_RELOAD` ∈ `{0,1}`
 
 ### `monitor-select`
 
 - **CLI:** `single` \| `dual` (`dual-host` alias)
 - **Requires:** `hypr/monitors/monitors-single.lua`, `monitors-dual-host.lua`
 - **Writes:** `hypr/monitors.lua` → `require("monitors.monitors-<profile>")`
+- **Also updates:** `quickshell/costa/profile.json` role / primary_monitor
 
 ### `desktop-settings`
 
 - **CLI:** `--keyboard LAYOUT`, `--clock 12h|24h`, `--show`
-- **Writes:** `costa/desktop.env`, `hypr/input.lua`, `waybar/user.jsonc` (`clock.format`)
+- **Writes:** `costa/desktop.env`, `hypr/input.lua`, `quickshell/costa/user.json` (`clock_format`)
 
 ## 7. install / deploy-user layout
 
@@ -226,9 +235,9 @@ packs directly.
 
 | Kind | Destination |
 |---|---|
-| `CONFIG` | `~/.config/{dunst,hypr,kitty,rofi,scripts,systemd,themes,waybar}/` plus `mimeapps.list` |
+| `CONFIG` | `~/.config/{dunst,hypr,kitty,quickshell,rofi,scripts,systemd,themes}/` plus `mimeapps.list` |
 | `DATA` | `~/.local/share/costa-utils/` (+ desktop entry / icons) |
-| `BIN` | `~/.local/bin/costa-utils` |
+| `BIN` | `~/.local/bin/costa-utils`, `~/.local/bin/qs-activity` |
 
 Manifest: `~/.config/costa/managed-files` lines `KIND\trelative`. Deploy removes
 only previous managed entries, then recopies. Env: `COSTA_DEPLOY_RELOAD`.
@@ -238,9 +247,9 @@ only previous managed entries, then recopies. Env: `COSTA_DEPLOY_RELOAD`.
 1. Optional `costa-utils --shutdown`
 2. Manifest replace of managed trees
 3. `daemon-reload` when reloading
-4. `waybar-profile` from `costa/install-profile` or virt detection
+4. `quickshell-profile` from `costa/install-profile` or virt detection
 5. Ensure `hyprland-session.target` if Hyprland is up
 6. `theme-select <theme>` (default `fcosta`)
 
-Install seeds the same layout, runs `desktop-settings` / `waybar-profile` /
+Install seeds the same layout, runs `desktop-settings` / `quickshell-profile` /
 `theme-select` with reload flags off, and syncs SDDM as root from the theme pack.

@@ -37,6 +37,7 @@ class InstallerTests(unittest.TestCase):
             "hyprpaper",
             "hyprpolkitagent",
             "hyprshutdown",
+            "quickshell",
             "networkmanager",
             "bluez",
             "pacman-contrib",
@@ -60,6 +61,7 @@ class InstallerTests(unittest.TestCase):
             "google-chrome",
             "brave",
             "epiphany",
+            "waybar",
         }
         for package in rejected:
             self.assertNotRegex(self.installer, rf"\b{re.escape(package)}\b")
@@ -184,6 +186,10 @@ class ThemeTests(unittest.TestCase):
                 continue
             missing = [relative for relative in required if not (theme / relative).is_file()]
             self.assertFalse(missing, f"{theme.name} is missing {missing}")
+            self.assertFalse(
+                (theme / "quickshell").exists(),
+                f"{theme.name} must not ship a parallel quickshell palette",
+            )
 
     def test_gtk_themes_define_libadwaita_surfaces(self):
         required_vars = {
@@ -214,7 +220,7 @@ class ThemeTests(unittest.TestCase):
         self.assertIn("color-scheme prefer-dark", selector)
         self.assertIn("apply_gtk_color_scheme", selector)
 
-    def test_theme_select_validates_full_waybar_color_set(self):
+    def test_theme_select_validates_full_palette_color_set(self):
         selector = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "theme-select").read_text()
         for variable in (
             "background",
@@ -236,7 +242,7 @@ class ThemeTests(unittest.TestCase):
             self.assertRegex(
                 selector,
                 rf"\b{re.escape(variable)}\b",
-                f"theme-select must validate Waybar color '{variable}'",
+                f"theme-select must validate palette color '{variable}'",
             )
 
     def test_theme_select_publishes_stable_consumer_destinations(self):
@@ -245,7 +251,7 @@ class ThemeTests(unittest.TestCase):
             'hypr/current_colors.lua"',
             'hypr/current_lock.conf"',
             'hypr/current_wallpaper.png"',
-            'waybar/colors.css"',
+            'quickshell/costa/colors.css"',
             'kitty/kitty-theme.conf"',
             'rofi/rofi-theme.rasi"',
             'dunst/dunstrc"',
@@ -258,7 +264,7 @@ class ThemeTests(unittest.TestCase):
                 f"theme-select must publish {destination.rstrip(chr(34))}",
             )
 
-    def test_waybar_theme_variables_exist(self):
+    def test_theme_palette_variables_exist(self):
         required_variables = {
             "background",
             "background-alt1",
@@ -282,64 +288,82 @@ class ThemeTests(unittest.TestCase):
             defined = set(re.findall(r"@define-color\s+([\w-]+)", content))
             self.assertFalse(
                 required_variables - defined,
-                f"{colors_file.parent.name} lacks Waybar variables",
+                f"{colors_file.parent.name} lacks palette variables",
             )
+
+    def test_quickshell_colors_consume_css_palette(self):
+        colors = (REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa" / "Colors.qml").read_text()
+        self.assertIn("colors.css", colors)
+        self.assertIn("applyCss", colors)
+        for name in (
+            "background",
+            "background-alt1",
+            "foreground-dim",
+            "soft-blue",
+            "soft-cyan",
+            "soft-lavender",
+            "soft-red",
+            "soft-yellow",
+        ):
+            self.assertIn(f'"{name}"', colors)
+        self.assertIn("readonly property color accent: softBlue", colors)
+        self.assertTrue(
+            (REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa" / "colors.css").is_file()
+        )
 
 
 class ConfigurationTests(unittest.TestCase):
     @staticmethod
-    def load_jsonc(path):
-        content = "\n".join(line.split("//", 1)[0] for line in path.read_text().splitlines())
-        return json.loads(content)
+    def load_json(path):
+        return json.loads(path.read_text())
 
-    def test_waybar_jsonc_is_valid(self):
-        waybar_dir = REPOSITORY_ROOT / "dotfiles" / "waybar"
+    def test_quickshell_profile_json_is_valid(self):
+        qs_dir = REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa"
         for filename in (
-            "config.jsonc",
-            "modules",
-            "profile.jsonc",
-            "profile-bare-metal.jsonc",
-            "profile-vm.jsonc",
-            "user.jsonc",
+            "profile.json",
+            "profile-bare-metal.json",
+            "profile-vm.json",
+            "user.json",
         ):
-            parsed = self.load_jsonc(waybar_dir / filename)
+            parsed = self.load_json(qs_dir / filename)
             self.assertIsInstance(parsed, dict)
 
-    def test_waybar_include_chain(self):
-        config = self.load_jsonc(REPOSITORY_ROOT / "dotfiles" / "waybar" / "config.jsonc")
-        self.assertEqual(
-            config["include"],
-            [
-                "~/.config/waybar/modules",
-                "~/.config/waybar/profile.jsonc",
-                "~/.config/waybar/user.jsonc",
-            ],
-        )
+    def test_quickshell_shell_entrypoint_exists(self):
+        qs_dir = REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa"
+        for required in (
+            "shell.qml",
+            "Bar.qml",
+            "Colors.qml",
+            "colors.css",
+            "Profile.qml",
+            "CenterStage.qml",
+            "AdaptiveTelemetry.qml",
+        ):
+            self.assertTrue((qs_dir / required).is_file(), required)
 
-    def test_waybar_and_hypr_costa_flags_resolve(self):
+    def test_quickshell_and_hypr_costa_flags_resolve(self):
         sys.path.insert(0, str(REPOSITORY_ROOT / "dotfiles" / "costa-utils"))
         from costautils.dispatch import resolve_target
 
         consumers = (
-            (REPOSITORY_ROOT / "dotfiles" / "waybar" / "modules").read_text(),
+            (REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa" / "Bar.qml").read_text(),
             (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprland.lua").read_text(),
         )
         flags = set()
         for content in consumers:
+            flags.update(re.findall(r'root\.costa,\s*"(--[a-z0-9-]+)"', content))
             flags.update(re.findall(r"costa-utils\s+(--[a-z0-9-]+)", content))
-        self.assertTrue(flags, "expected costa-utils flags in Waybar/Hyprland")
+        self.assertTrue(flags, "expected costa-utils flags in Quickshell/Hyprland")
         for flag in sorted(flags):
             self.assertEqual(
                 resolve_target(flag),
                 flag,
-                f"{flag} referenced by Waybar/Hyprland is not in the dispatch surface",
+                f"{flag} referenced by Quickshell/Hyprland is not in the dispatch surface",
             )
 
-    def test_waybar_workspaces_are_numbered(self):
-        modules = self.load_jsonc(REPOSITORY_ROOT / "dotfiles" / "waybar" / "modules")
-        workspaces = modules["hyprland/workspaces"]
-        self.assertEqual(workspaces["format"], "{id}")
-        self.assertNotIn("format-icons", workspaces)
+    def test_quickshell_workspaces_are_numbered(self):
+        bar = (REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa" / "Bar.qml").read_text()
+        self.assertIn("ids: root.primary ? [1, 2, 3, 4] : [5, 6, 7, 8]", bar)
 
     def test_hyprlock_sources_theme_lock_colors(self):
         lock = (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprlock.conf").read_text()
@@ -352,9 +376,10 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("fit_mode = cover", selector)
         self.assertNotIn("preload =", selector)
 
-    def test_waybar_css_avoids_unsupported_gtk_properties(self):
-        style = (REPOSITORY_ROOT / "dotfiles" / "waybar" / "style.css").read_text()
-        self.assertNotIn("font-variant-numeric", style)
+    def test_quickshell_uses_profile_for_primary_monitor(self):
+        bar = (REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa" / "Bar.qml").read_text()
+        self.assertIn("Profile.isPrimary(modelData.name)", bar)
+        self.assertNotIn('modelData.name === "HDMI-A-1"', bar)
 
     def test_vm_profile_enables_virtio_3d(self):
         creator = (REPOSITORY_ROOT / "scripts" / "create-vm").read_text()
@@ -417,24 +442,27 @@ class ConfigurationTests(unittest.TestCase):
             "hyprpaper.service",
             "hyprpolkitagent.service",
             "hyprsunset.service",
-            "waybar.service",
+            "quickshell.service",
         ):
             self.assertIn(f"Wants={unit}", target)
 
         self.assertIn("systemctl --user start hyprland-session.target", lua)
         self.assertIn("systemctl --user stop hyprland-session.target", lua)
+        self.assertIn("costa-quickshell-blur", lua)
         for direct_command in (
             'hl.exec_cmd("dunst")',
             'hl.exec_cmd("hypridle")',
             'hl.exec_cmd("hyprpaper")',
             'hl.exec_cmd("hyprsunset")',
             'hl.exec_cmd("waybar")',
+            'hl.exec_cmd("quickshell")',
+            'hl.exec_cmd("qs")',
             "wl-paste --type text --watch",
             "wl-paste --type image --watch",
         ):
             self.assertNotIn(direct_command, lua)
 
-        for service in ("cliphist-image.service", "cliphist-text.service"):
+        for service in ("cliphist-image.service", "cliphist-text.service", "quickshell.service"):
             contents = (user_units / service).read_text()
             self.assertIn("PartOf=hyprland-session.target", contents)
             self.assertIn("Restart=on-failure", contents)
@@ -446,12 +474,14 @@ class ConfigurationTests(unittest.TestCase):
             "hyprpolkitagent",
             "hyprsunset",
             "spice-vdagent",
-            "waybar",
         ):
             drop_in = (user_units / f"{service}.service.d" / "costa-session.conf").read_text()
             self.assertIn("PartOf=hyprland-session.target", drop_in)
             self.assertIn("After=hyprland-session.target", drop_in)
             self.assertIn("Restart=on-failure", drop_in)
+
+        quickshell = (user_units / "quickshell.service").read_text()
+        self.assertIn("ExecStart=/usr/bin/qs -c costa", quickshell)
 
     def test_check_updates_distinguishes_failures(self):
         script = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "check_updates").read_text()
@@ -459,12 +489,6 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn('"error"', script)
         self.assertIn("status=$?", script)
         self.assertNotIn("|| true", script)
-
-    def test_waybar_does_not_ship_unused_mpris_module(self):
-        modules = (REPOSITORY_ROOT / "dotfiles" / "waybar" / "modules").read_text()
-        style = (REPOSITORY_ROOT / "dotfiles" / "waybar" / "style.css").read_text()
-        self.assertNotIn('"mpris"', modules)
-        self.assertNotIn("#mpris", style)
 
     def test_runner_history_is_private(self):
         source = (
@@ -490,7 +514,7 @@ class ConfigurationTests(unittest.TestCase):
     def test_user_deployer_covers_every_config_component(self):
         deployer = (REPOSITORY_ROOT / "scripts" / "deploy-user").read_text()
         self.assertIn(
-            "CONFIG_COMPONENTS=(dunst hypr kitty rofi scripts systemd themes waybar)",
+            "CONFIG_COMPONENTS=(dunst hypr kitty quickshell rofi scripts systemd themes)",
             deployer,
         )
         self.assertIn("dotfiles/costa-utils", deployer)
@@ -500,14 +524,25 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("MANIFEST_FILE", deployer)
         self.assertIn("COSTA_DEPLOY_RELOAD", deployer)
         self.assertIn("remove_previous_manifest", deployer)
+        self.assertIn("qs-activity", deployer)
         self.assertNotIn('pkill -f "${BIN_DIR}/costa-utils"', deployer)
 
-    def test_waybar_vm_profile_omits_bare_metal_sensors(self):
-        vm = self.load_jsonc(REPOSITORY_ROOT / "dotfiles" / "waybar" / "profile-vm.jsonc")
-        modules = vm["group/usage"]["modules"]
-        self.assertNotIn("custom/gpu", modules)
-        self.assertNotIn("custom/vram", modules)
-        self.assertNotIn("temperature", modules)
+    def test_quickshell_vm_profile_omits_bare_metal_sensors(self):
+        vm = self.load_json(
+            REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa" / "profile-vm.json"
+        )
+        bare = self.load_json(
+            REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa" / "profile-bare-metal.json"
+        )
+        self.assertFalse(vm["telemetry_gpu"])
+        self.assertEqual(vm["role"], "single")
+        self.assertTrue(bare["telemetry_gpu"])
+        self.assertEqual(bare["role"], "dual-host")
+        self.assertEqual(bare["primary_monitor"], "HDMI-A-1")
+        telemetry = (
+            REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa" / "AdaptiveTelemetry.qml"
+        ).read_text()
+        self.assertIn("Profile.telemetryGpu", telemetry)
 
     def test_theme_switch_is_a_single_pointer_transaction(self):
         selector = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "theme-select").read_text()

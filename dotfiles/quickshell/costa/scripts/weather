@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+raw="$(curl -sf --max-time 4 'wttr.in/?format=%t' 2>/dev/null || true)"
+raw="${raw//'+'/}"
+raw="${raw//$'\n'/}"
+[[ -n "${raw}" && "${raw}" != *Unknown* ]] && printf '%s\n' "${raw}"

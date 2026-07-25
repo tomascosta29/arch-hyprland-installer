@@ -139,7 +139,7 @@ atomic_symlink "${THEME_STATE_DIR}/current-theme/colors.lua" \
 atomic_symlink "${THEME_STATE_DIR}/current-theme/lock.conf" \
     "${CONFIG_DIR}/hypr/current_lock.conf"
 atomic_symlink "${THEME_STATE_DIR}/current-theme/colors.css" \
-    "${CONFIG_DIR}/waybar/colors.css"
+    "${CONFIG_DIR}/quickshell/costa/colors.css"
 atomic_symlink "${THEME_STATE_DIR}/current-theme/kitty-theme.conf" \
     "${CONFIG_DIR}/kitty/kitty-theme.conf"
 atomic_symlink "${THEME_STATE_DIR}/current-theme/rofi-theme.rasi" \
@@ -178,7 +178,7 @@ if [[ "${RELOAD_DESKTOP}" == 1 ]] &&
     command -v systemctl >/dev/null 2>&1 &&
     systemctl --user is-active --quiet hyprland-session.target; then
     systemctl --user try-restart hyprpaper.service >/dev/null 2>&1 || true
-    systemctl --user try-reload-or-restart waybar.service >/dev/null 2>&1 || true
+    systemctl --user try-reload-or-restart quickshell.service >/dev/null 2>&1 || true
     systemctl --user try-reload-or-restart dunst.service >/dev/null 2>&1 || true
 fi
 if [[ "${RELOAD_DESKTOP}" == 1 ]] && pgrep -x kitty >/dev/null 2>&1; then

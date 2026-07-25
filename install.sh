@@ -259,7 +259,7 @@ COMMON_PACKAGES=(
     pavucontrol playerctl sound-theme-freedesktop
     mesa mesa-utils vulkan-tools libva-utils
     hyprland hyprpaper hyprlock hypridle hyprsunset hyprshutdown hyprpolkitagent
-    waybar kitty rofi dunst
+    quickshell kitty rofi dunst
     xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
     xdg-utils xdg-user-dirs
     sddm nautilus gvfs gvfs-mtp udisks2 gnome-keyring
@@ -269,6 +269,7 @@ COMMON_PACKAGES=(
     gobject-introspection upower cliphist
     grim slurp wl-clipboard brightnessctl libnotify
     pacman-contrib htop lm_sensors man-db man-pages
+    jq curl pulseaudio-utils
     ttf-jetbrains-mono-nerd otf-font-awesome
     noto-fonts noto-fonts-emoji noto-fonts-cjk papirus-icon-theme
 )
@@ -401,6 +402,8 @@ cp -a "${SCRIPT_DIR}/dotfiles/costa-utils" \
     "${USER_HOME}/.local/share/costa-utils"
 ln -sfn "../share/costa-utils/costa_utils.py" \
     "${USER_HOME}/.local/bin/costa-utils"
+ln -sfn "${USER_HOME}/.config/quickshell/costa/scripts/qs-activity" \
+    "${USER_HOME}/.local/bin/qs-activity"
 mkdir -p "${USER_HOME}/.local/share/applications"
 cp -a \
     "${SCRIPT_DIR}/dotfiles/costa-utils/applications/org.fcosta.CostaUtils.desktop" \
@@ -418,7 +421,7 @@ MANIFEST_DIR="${USER_HOME}/.config/costa"
 MANIFEST_FILE="${MANIFEST_DIR}/managed-files"
 mkdir -p "${MANIFEST_DIR}"
 : > "${MANIFEST_FILE}"
-for component in dunst hypr kitty rofi scripts systemd themes waybar; do
+for component in dunst hypr kitty quickshell rofi scripts systemd themes; do
     source_root="${SCRIPT_DIR}/dotfiles/${component}"
     while IFS= read -r -d '' source; do
         relative="${source#"${source_root}/"}"
@@ -436,7 +439,8 @@ done < <(find "${source_root}" \( -type f -o -type l \) -print0)
 printf '%s\n' \
     'DATA	applications/org.fcosta.CostaUtils.desktop' \
     'DATA	icons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg' \
-    'BIN	costa-utils' >> "${MANIFEST_FILE}"
+    'BIN	costa-utils' \
+    'BIN	qs-activity' >> "${MANIFEST_FILE}"
 chmod 0644 "${MANIFEST_FILE}"
 
 # Install the matched SDDM greeter theme and seed it with the default wallpaper.
@@ -459,6 +463,7 @@ readonly INSTALL_PROFILE=$4
 readonly USER_HOME="/home/${INSTALL_USERNAME}"
 
 find "${USER_HOME}/.config/scripts" -type f -exec chmod 0755 {} +
+find "${USER_HOME}/.config/quickshell/costa/scripts" -type f -exec chmod 0755 {} +
 chmod 0755 "${USER_HOME}/.local/share/costa-utils/costa_utils.py"
 chmod 0755 "${USER_HOME}/.local/share/costa-utils/uninstall.sh"
 chown -R "${INSTALL_USERNAME}:${INSTALL_USERNAME}" "${USER_HOME}"
@@ -476,8 +481,8 @@ runuser -u "${INSTALL_USERNAME}" -- env \
 runuser -u "${INSTALL_USERNAME}" -- env \
     HOME="${USER_HOME}" \
     XDG_CONFIG_HOME="${USER_HOME}/.config" \
-    COSTA_WAYBAR_RELOAD=0 \
-    "${USER_HOME}/.config/scripts/waybar-profile" "${INSTALL_PROFILE}"
+    COSTA_QUICKSHELL_RELOAD=0 \
+    "${USER_HOME}/.config/scripts/quickshell-profile" "${INSTALL_PROFILE}"
 runuser -u "${INSTALL_USERNAME}" -- env \
     HOME="${USER_HOME}" \
     XDG_CONFIG_HOME="${USER_HOME}/.config" \

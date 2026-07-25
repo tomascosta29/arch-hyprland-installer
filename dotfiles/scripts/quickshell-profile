@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Select hardware-appropriate Quickshell profile settings.
+
+set -Eeuo pipefail
+
+readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
+readonly QUICKSHELL_DIR="${CONFIG_DIR}/quickshell/costa"
+readonly STATE_DIR="${CONFIG_DIR}/costa"
+readonly RELOAD_QUICKSHELL="${COSTA_QUICKSHELL_RELOAD:-1}"
+
+die() {
+    printf 'Error: %s\n' "$1" >&2
+    exit 1
+}
+
+if (($# != 1)); then
+    die "Usage: quickshell-profile bare-metal|vm"
+fi
+
+PROFILE=$1
+case "${PROFILE}" in
+    bare-metal | vm) ;;
+    *) die "Profile must be 'bare-metal' or 'vm'." ;;
+esac
+[[ "${RELOAD_QUICKSHELL}" == 0 || "${RELOAD_QUICKSHELL}" == 1 ]] ||
+    die "COSTA_QUICKSHELL_RELOAD must be 0 or 1."
+
+source_file="${QUICKSHELL_DIR}/profile-${PROFILE}.json"
+destination="${QUICKSHELL_DIR}/profile.json"
+[[ -f "${source_file}" ]] || die "Missing Quickshell profile '${source_file}'."
+
+temp_file="$(mktemp "${QUICKSHELL_DIR}/.profile.json.XXXXXX")"
+cp "${source_file}" "${temp_file}"
+chmod 0644 "${temp_file}"
+mv -f "${temp_file}" "${destination}"
+mkdir -p "${STATE_DIR}"
+printf '%s\n' "${PROFILE}" > "${STATE_DIR}/install-profile"
+
+if [[ "${RELOAD_QUICKSHELL}" == 1 ]] &&
+    systemctl --user is-active --quiet quickshell.service 2>/dev/null; then
+    systemctl --user try-reload-or-restart quickshell.service
+fi

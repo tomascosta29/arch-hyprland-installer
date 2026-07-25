@@ -74,6 +74,13 @@ hl.window_rule({
     center = true,
 })
 
+hl.layer_rule({
+    name = "costa-quickshell-blur",
+    match = { namespace = "^quickshell$" },
+    blur = true,
+    ignore_alpha = 0.35,
+})
+
 hl.on("hyprland.start", function()
     hl.exec_cmd(
         "dbus-update-activation-environment --systemd "

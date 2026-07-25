@@ -1,0 +1,315 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+runtime_base="${XDG_RUNTIME_DIR:-/tmp}"
+state_dir="${runtime_base}/quickshell-costa"
+state_file="${state_dir}/network-state"
+mkdir -p "${state_dir}"
+
+clients="$(hyprctl -j clients 2>/dev/null | jq -c . 2>/dev/null || printf '[]')"
+monitors="$(hyprctl -j monitors 2>/dev/null | jq -c . 2>/dev/null || printf '[]')"
+
+contexts="$(
+  jq -cn \
+    --argjson clients "${clients}" \
+    --argjson monitors "${monitors}" '
+      reduce $monitors[] as $monitor ({};
+        .[$monitor.name] = (
+          (
+            $clients
+            | map(select(
+                .mapped
+                and (.hidden | not)
+                and .workspace.id == $monitor.activeWorkspace.id
+              ))
+            | sort_by(.focusHistoryID)
+            | .[0]
+          ) as $client
+          | if $client then {
+              valid: true,
+              focused: ($monitor.focused // false),
+              workspace: $monitor.activeWorkspace.id,
+              address: $client.address,
+              pid: $client.pid,
+              class: ($client.class // $client.initialClass // ""),
+              title: ($client.title // ""),
+              repo: "",
+              branch: "",
+              dirty: 0
+            } else {
+              valid: false,
+              focused: false,
+              workspace: $monitor.activeWorkspace.id,
+              address: "",
+              pid: 0,
+              class: "",
+              title: "",
+              repo: "",
+              branch: "",
+              dirty: 0
+            } end
+        )
+      )
+    '
+)"
+
+process_table="$(ps -eo pid=,ppid=,etimes=,comm=,args= 2>/dev/null || true)"
+
+git_context_for_pid() {
+  local root_pid="$1"
+  local -a queue=("${root_pid}")
+  local -a all_pids=()
+  local index=0
+  local current child
+
+  while (( index < ${#queue[@]} && index < 80 )); do
+    current="${queue[index]}"
+    all_pids+=("${current}")
+    while read -r child; do
+      [[ -n "${child}" ]] && queue+=("${child}")
+    done < <(awk -v parent="${current}" '$2 == parent { print $1 }' <<< "${process_table}")
+    ((index++))
+  done
+
+  local candidate cwd repo branch dirty
+  for ((index=0; index < ${#all_pids[@]}; index++)); do
+    candidate="${all_pids[index]}"
+    cwd="$(readlink -f "/proc/${candidate}/cwd" 2>/dev/null || true)"
+    [[ -n "${cwd}" ]] || continue
+    repo="$(timeout 1s git -C "${cwd}" rev-parse --show-toplevel 2>/dev/null || true)"
+    [[ -n "${repo}" ]] || continue
+    branch="$(timeout 1s git -C "${repo}" branch --show-current 2>/dev/null || true)"
+    [[ -n "${branch}" ]] || branch="$(timeout 1s git -C "${repo}" rev-parse --short HEAD 2>/dev/null || true)"
+    dirty="$(timeout 1s git -C "${repo}" status --porcelain --untracked-files=normal 2>/dev/null | wc -l)"
+    printf '%s|%s|%s\n' "${repo##*/}" "${branch}" "${dirty//[[:space:]]/}"
+    return
+  done
+
+  printf '||0\n'
+}
+
+task_for_pid() {
+  local root_pid="$1"
+  local -a queue=("${root_pid}")
+  local -a all_pids=()
+  local index=0
+  local current child row pid ppid elapsed comm args executable
+  local kind title priority
+
+  while (( index < ${#queue[@]} && index < 120 )); do
+    current="${queue[index]}"
+    all_pids+=("${current}")
+    while read -r child; do
+      [[ -n "${child}" ]] && queue+=("${child}")
+    done < <(awk -v parent="${current}" '$2 == parent { print $1 }' <<< "${process_table}")
+    ((index++))
+  done
+
+  for ((index=${#all_pids[@]} - 1; index >= 0; index--)); do
+    current="${all_pids[index]}"
+    row="$(awk -v wanted="${current}" '$1 == wanted { print; exit }' <<< "${process_table}")"
+    [[ -n "${row}" ]] || continue
+    read -r pid ppid elapsed comm args <<< "${row}"
+    executable="${args%% *}"
+    executable="${executable##*/}"
+    comm="${comm,,}"
+    executable="${executable,,}"
+    kind=""
+    title=""
+    priority=40
+
+    case "${comm}:${executable}" in
+      dnf:*|dnf5:*|*:dnf|*:dnf5)
+        kind="package"
+        priority=80
+        if [[ " ${args} " == *" upgrade "* || " ${args} " == *" update "* ]]; then
+          title="Updating packages"
+        elif [[ " ${args} " == *" install "* ]]; then
+          title="Installing packages"
+        elif [[ " ${args} " == *" remove "* ]]; then
+          title="Removing packages"
+        else
+          title="DNF transaction"
+        fi
+        ;;
+      flatpak:*|*:flatpak)
+        [[ " ${args} " == *" update "* || " ${args} " == *" install "* || " ${args} " == *" uninstall "* ]] || continue
+        kind="package"
+        title="Flatpak transaction"
+        priority=75
+        ;;
+      apt:*|apt-get:*|*:apt|*:apt-get|pacman:*|*:pacman|zypper:*|*:zypper)
+        kind="package"
+        title="Package transaction"
+        priority=80
+        ;;
+      rsync:*|*:rsync|rclone:*|*:rclone)
+        kind="transfer"
+        if [[ "${executable}" == "rclone" ]]; then
+          title="Rclone"
+        else
+          title="Rsync"
+        fi
+        priority=55
+        ;;
+    esac
+
+    [[ -n "${kind}" ]] || continue
+    jq -cn \
+      --argjson pid "${pid}" \
+      --arg kind "${kind}" \
+      --arg title "${title}" \
+      --arg command "${args}" \
+      --argjson elapsed "${elapsed:-0}" \
+      --argjson priority "${priority}" \
+      '{pid: $pid, kind: $kind, title: $title, command: $command, elapsed: $elapsed, priority: $priority}'
+    return
+  done
+
+  printf '{}\n'
+}
+
+if [[ "${1:-}" == "--task-for-pid" ]]; then
+  [[ "${2:-}" =~ ^[0-9]+$ ]] || exit 2
+  task_for_pid "$2"
+  exit
+fi
+
+while IFS= read -r monitor_name; do
+  pid="$(jq -r --arg monitor "${monitor_name}" '.[$monitor].pid // 0' <<< "${contexts}")"
+  (( pid > 0 )) || continue
+  IFS='|' read -r repo branch dirty < <(git_context_for_pid "${pid}")
+  contexts="$(
+    jq -c \
+      --arg monitor "${monitor_name}" \
+      --arg repo "${repo}" \
+      --arg branch "${branch}" \
+      --argjson dirty "${dirty:-0}" \
+      '.[$monitor] += {repo: $repo, branch: $branch, dirty: $dirty}' \
+      <<< "${contexts}"
+  )"
+done < <(jq -r 'keys[]' <<< "${contexts}")
+
+tasks='[]'
+monitor_names="$(
+  jq -c '
+    map({key: (.id | tostring), value: .name})
+    | from_entries
+  ' <<< "${monitors}"
+)"
+
+while IFS=$'\t' read -r client_pid workspace_id monitor_id app_class; do
+  [[ "${client_pid}" =~ ^[0-9]+$ ]] || continue
+  task="$(task_for_pid "${client_pid}")"
+  [[ "$(jq -r 'has("pid")' <<< "${task}")" == "true" ]] || continue
+  monitor_name="$(jq -r --arg id "${monitor_id}" '.[$id] // ""' <<< "${monitor_names}")"
+  tasks="$(
+    jq -c \
+      --argjson task "${task}" \
+      --argjson workspace "${workspace_id}" \
+      --arg monitor "${monitor_name}" \
+      --arg app "${app_class}" \
+      '. + [$task + {workspace: $workspace, monitor: $monitor, app: $app}]' \
+      <<< "${tasks}"
+  )"
+done < <(
+  jq -r '
+    .[]
+    | select(.mapped and (.hidden | not))
+    | [.pid, .workspace.id, .monitor, (.class // .initialClass // "")]
+    | @tsv
+  ' <<< "${clients}"
+)
+
+audio='{"active":false,"workspace":0,"class":"","title":""}'
+streams="$(pactl -f json list sink-inputs 2>/dev/null | jq -c . 2>/dev/null || printf '[]')"
+
+while IFS= read -r stream_pid; do
+  [[ "${stream_pid}" =~ ^[0-9]+$ ]] && (( stream_pid > 0 )) || continue
+  candidate="${stream_pid}"
+  matched_pid=0
+  for _ in {1..24}; do
+    if jq -e --argjson pid "${candidate}" 'any(.[]; .pid == $pid)' <<< "${clients}" >/dev/null; then
+      matched_pid="${candidate}"
+      break
+    fi
+    parent="$(awk -v pid="${candidate}" '$1 == pid { print $2; exit }' <<< "${process_table}")"
+    [[ "${parent}" =~ ^[0-9]+$ ]] && (( parent > 1 )) || break
+    candidate="${parent}"
+  done
+
+  if (( matched_pid > 0 )); then
+    audio="$(
+      jq -c --argjson pid "${matched_pid}" '
+        first(.[] | select(.pid == $pid))
+        | {
+            active: true,
+            workspace: .workspace.id,
+            class: (.class // .initialClass // ""),
+            title: (.title // "")
+          }
+      ' <<< "${clients}"
+    )"
+    break
+  fi
+done < <(
+  jq -r '
+    map(select((.corked // false) == false and (.mute // false) == false))
+    | map(.properties["application.process.id"] // empty)
+    | unique[]
+  ' <<< "${streams}" 2>/dev/null || true
+)
+
+interface="$(
+  ip -j -4 route show default 2>/dev/null \
+    | jq -r 'sort_by(.metric // 0) | map(select(.dev != "lo")) | .[0].dev // empty' 2>/dev/null \
+    || true
+)"
+if [[ -z "${interface}" ]]; then
+  interface="$(
+    ip -j -6 route show default 2>/dev/null \
+      | jq -r 'sort_by(.metric // 0) | map(select(.dev != "lo")) | .[0].dev // empty' 2>/dev/null \
+      || true
+  )"
+fi
+if [[ -z "${interface}" ]]; then
+  interface="$(
+    awk '$2 == "00000000" && $1 != "lo" { print $8, $1 }' /proc/net/route 2>/dev/null \
+      | sort -n \
+      | awk 'NR == 1 { print $2 }'
+  )"
+fi
+rx_bps=0
+tx_bps=0
+if [[ -n "${interface}" && -r "/sys/class/net/${interface}/statistics/rx_bytes" ]]; then
+  read -r rx_now < "/sys/class/net/${interface}/statistics/rx_bytes"
+  read -r tx_now < "/sys/class/net/${interface}/statistics/tx_bytes"
+  timestamp_now="$(date +%s%3N)"
+
+  if [[ -r "${state_file}" ]]; then
+    read -r interface_old rx_old tx_old timestamp_old < "${state_file}" || true
+    if [[ "${interface_old:-}" == "${interface}" ]] && (( timestamp_now > ${timestamp_old:-0} )); then
+      elapsed=$((timestamp_now - timestamp_old))
+      rx_bps=$(( (rx_now - rx_old) * 1000 / elapsed ))
+      tx_bps=$(( (tx_now - tx_old) * 1000 / elapsed ))
+      (( rx_bps >= 0 )) || rx_bps=0
+      (( tx_bps >= 0 )) || tx_bps=0
+    fi
+  fi
+
+  printf '%s %s %s %s\n' "${interface}" "${rx_now}" "${tx_now}" "${timestamp_now}" > "${state_file}"
+fi
+
+jq -cn \
+  --argjson contexts "${contexts}" \
+  --argjson tasks "${tasks}" \
+  --argjson audio "${audio}" \
+  --arg interface "${interface}" \
+  --argjson rx "${rx_bps}" \
+  --argjson tx "${tx_bps}" \
+  '{
+    contexts: $contexts,
+    tasks: $tasks,
+    audio: $audio,
+    network: {interface: $interface, rx: $rx, tx: $tx}
+  }'

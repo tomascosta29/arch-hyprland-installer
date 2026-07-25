@@ -50,7 +50,7 @@ PROFILE="${PROFILE:-bare-metal}"
 
 for package in \
     base linux grub networkmanager firewalld bluez pipewire wireplumber \
-    hyprland waybar kitty dunst sddm gnome-keyring cliphist; do
+    hyprland quickshell kitty dunst sddm gnome-keyring cliphist jq; do
     check "package ${package}" pacman -Q "${package}"
 done
 
@@ -75,13 +75,17 @@ if [[ "${PROFILE}" == vm ]]; then
 fi
 
 check "Costa Utils entry point" test -x "${HOME}/.local/bin/costa-utils"
+check "qs-activity entry point" test -x "${HOME}/.local/bin/qs-activity"
 check "Costa Utils application" test -f "${DATA_DIR}/costa-utils/costa_utils.py"
 check "Hyprland Lua config" test -f "${CONFIG_DIR}/hypr/hyprland.lua"
+check "Quickshell shell entry" test -f "${CONFIG_DIR}/quickshell/costa/shell.qml"
 check "transactional theme pointer" test -L "${CONFIG_DIR}/costa/current-theme"
+check "Quickshell theme palette" test -e "${CONFIG_DIR}/quickshell/costa/colors.css"
 check "GTK4 theme CSS" test -e "${CONFIG_DIR}/gtk-4.0/gtk.css"
 check "GTK prefer-dark settings" \
     grep -Fq 'gtk-application-prefer-dark-theme=1' "${CONFIG_DIR}/gtk-4.0/settings.ini"
-check "Waybar profile state" grep -Fxq "${PROFILE}" "${CONFIG_DIR}/costa/install-profile"
+check "Quickshell profile state" grep -Fxq "${PROFILE}" "${CONFIG_DIR}/costa/install-profile"
+check "Quickshell profile file" test -f "${CONFIG_DIR}/quickshell/costa/profile.json"
 
 if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && command -v gsettings >/dev/null 2>&1; then
     check "GNOME color-scheme prefer-dark" \
@@ -91,30 +95,34 @@ fi
 if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
     check "Hyprland session target active" \
         systemctl --user is-active hyprland-session.target
-    for unit in waybar.service dunst.service hyprpaper.service cliphist-text.service; do
+    for unit in quickshell.service dunst.service hyprpaper.service cliphist-text.service; do
         check "${unit} active" systemctl --user is-active "${unit}"
     done
 fi
 
-if python - "${DATA_DIR}/costa-utils" "${CONFIG_DIR}/waybar" <<'PY'
+if python - "${DATA_DIR}/costa-utils" "${CONFIG_DIR}/quickshell/costa" <<'PY'
 import ast
 import json
 from pathlib import Path
 import sys
 
 app_root = Path(sys.argv[1])
-waybar_root = Path(sys.argv[2])
+qs_root = Path(sys.argv[2])
 for source in app_root.rglob("*.py"):
     ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-for name in ("config.jsonc", "modules", "profile.jsonc", "user.jsonc"):
-    content = (waybar_root / name).read_text(encoding="utf-8")
-    content = "\n".join(line.split("//", 1)[0] for line in content.splitlines())
-    json.loads(content)
+for name in ("profile.json", "profile-bare-metal.json", "profile-vm.json", "user.json"):
+    json.loads((qs_root / name).read_text(encoding="utf-8"))
+for required in ("shell.qml", "Bar.qml", "Colors.qml", "Profile.qml", "colors.css"):
+    if not (qs_root / required).is_file():
+        raise SystemExit(f"missing {required}")
+palette = (qs_root / "colors.css").read_text(encoding="utf-8")
+if "@define-color background" not in palette:
+    raise SystemExit("colors.css missing background")
 PY
 then
-    pass "Python and Waybar installed syntax"
+    pass "Python and Quickshell installed syntax"
 else
-    fail "Python and Waybar installed syntax"
+    fail "Python and Quickshell installed syntax"
 fi
 
 if command -v hyprctl >/dev/null 2>&1 &&
