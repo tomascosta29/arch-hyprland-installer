@@ -507,7 +507,13 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_runner_history_is_private(self):
         source = (
-            REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "backends" / "apps.rs"
+            REPOSITORY_ROOT
+            / "costa-utils"
+            / "crates"
+            / "costa-core"
+            / "src"
+            / "backends"
+            / "apps.rs"
         ).read_text()
         self.assertIn("0o600", source)
         self.assertIn("is_private_runner_command", source)
@@ -515,11 +521,33 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_window_capture_uses_json_geometry(self):
         source = (
-            REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "backends" / "blinker.rs"
+            REPOSITORY_ROOT
+            / "costa-utils"
+            / "crates"
+            / "costa-core"
+            / "src"
+            / "backends"
+            / "blinker.rs"
         ).read_text()
         self.assertIn('["hyprctl", "-j", "activewindow"]', source)
         self.assertIn("No active window geometry", source)
         self.assertNotIn('re.search(r"at:', source)
+
+    def test_screenshot_capture_plays_standard_shutter_sound(self):
+        source = (
+            REPOSITORY_ROOT
+            / "costa-utils"
+            / "crates"
+            / "costa-core"
+            / "src"
+            / "backends"
+            / "blinker.rs"
+        ).read_text()
+        self.assertIn('"canberra-gtk-play"', source)
+        self.assertIn('"camera-shutter"', source)
+        self.assertLess(
+            source.index("if config.play_sound"), source.index("if config.show_notification")
+        )
 
     def test_svg_icons_are_well_formed(self):
         icons_dir = REPOSITORY_ROOT / "costa-utils" / "assets" / "icons"
@@ -571,7 +599,9 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_costa_utils_has_bounded_shared_backends(self):
         backends = REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "backends"
-        command = (REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "command.rs").read_text()
+        command = (
+            REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "command.rs"
+        ).read_text()
         media = (backends / "media.rs").read_text()
         bluetooth = (backends / "bluetooth.rs").read_text()
         network = (backends / "network.rs").read_text()
@@ -594,6 +624,14 @@ class ConfigurationTests(unittest.TestCase):
         config = (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprland.lua").read_text()
         self.assertIn('leaf = "borderangle"', config)
         self.assertNotIn('leaf = "borderAngle"', config)
+
+    def test_hyprland_uses_click_to_focus_for_reliable_popups(self):
+        input_config = (REPOSITORY_ROOT / "dotfiles" / "hypr" / "input.lua").read_text()
+        settings = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "desktop-settings").read_text()
+        self.assertIn("follow_mouse = 0", input_config)
+        self.assertIn("follow_mouse = 0", settings)
+        self.assertNotIn("follow_mouse = 1", input_config)
+        self.assertNotIn("follow_mouse = 1", settings)
 
     def test_costa_utils_uses_gl_fallback_without_amdgpu(self):
         launcher = (

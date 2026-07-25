@@ -54,7 +54,8 @@ hl.config({
         kb_variant = "",
         kb_model = "",
         kb_options = "",
-        follow_mouse = 1,
+        -- Click-to-focus keeps transient popup dismissal deterministic.
+        follow_mouse = 0,
         sensitivity = 0,
         touchpad = {
             natural_scroll = false,

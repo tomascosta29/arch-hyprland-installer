@@ -89,10 +89,7 @@ class CostaUtilsTreeTests(unittest.TestCase):
     def test_desktop_assets_exist(self):
         self.assertTrue(
             (
-                COSTA_UTILS_ROOT
-                / "assets"
-                / "applications"
-                / "org.fcosta.CostaUtils.desktop"
+                COSTA_UTILS_ROOT / "assets" / "applications" / "org.fcosta.CostaUtils.desktop"
             ).is_file()
         )
         self.assertTrue((COSTA_UTILS_ROOT / "assets" / "icons" / "costa_utils.svg").is_file())

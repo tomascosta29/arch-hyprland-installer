@@ -29,6 +29,8 @@ pub struct BlinkerConfig {
     #[serde(default = "default_true")]
     pub show_notification: bool,
     #[serde(default = "default_true")]
+    pub play_sound: bool,
+    #[serde(default = "default_true")]
     pub open_manager_after_capture: bool,
 }
 
@@ -49,6 +51,7 @@ impl Default for BlinkerConfig {
             naming_pattern: default_pattern(),
             copy_to_clipboard: true,
             show_notification: true,
+            play_sound: true,
             open_manager_after_capture: true,
         }
     }
@@ -179,6 +182,15 @@ impl BlinkerBackend {
 
         if config.copy_to_clipboard {
             let _ = copy_image_file(&path);
+        }
+        if config.play_sound {
+            let _ = command::spawn(&[
+                "canberra-gtk-play",
+                "--id",
+                "camera-shutter",
+                "--description",
+                "Screenshot captured",
+            ]);
         }
         if config.show_notification {
             let _ = command::spawn(&[

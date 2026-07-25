@@ -5,7 +5,9 @@ hl.config({
         kb_variant = "",
         kb_model = "",
         kb_options = "",
-        follow_mouse = 1,
+        -- Click-to-focus makes popup focus loss represent an intentional
+        -- outside click instead of ordinary pointer movement.
+        follow_mouse = 0,
         sensitivity = 0,
         touchpad = {
             natural_scroll = false,

@@ -1,6 +1,6 @@
-//! Shared popup lifecycle: Esc, hide-on-close, debounced focus-loss dismiss.
+//! Shared popup lifecycle: claim focus, Esc, hide-on-close, and focus-loss dismiss.
 
-use crate::focus_guard::{FocusLossGuard, FOCUS_LOSS_DEBOUNCE_MS};
+use crate::focus_guard::{FocusLossGuard, LAUNCH_GESTURE_MS};
 use adw::prelude::*;
 use glib::clone;
 use gtk4::{gdk, glib};
@@ -46,25 +46,24 @@ pub fn install_popup_dismiss(window: &adw::ApplicationWindow, focus_guard: Rc<Re
                 }
                 let gen = focus_guard.borrow().generation.get();
                 let focus_guard = focus_guard.clone();
-                glib::timeout_add_local(
-                    std::time::Duration::from_millis(u64::from(FOCUS_LOSS_DEBOUNCE_MS)),
+                // Confirm at the next idle turn. A transient inactive→active
+                // pair in the same compositor update invalidates this check,
+                // while genuine outside clicks close without a visible delay.
+                glib::idle_add_local_once(
                     clone!(
                         #[weak]
                         window,
                         #[strong]
                         focus_guard,
-                        #[upgrade_or]
-                        return glib::ControlFlow::Break,
                         move || {
                             if focus_guard.borrow().generation.get() != gen {
-                                return glib::ControlFlow::Break;
+                                return;
                             }
                             if window.is_visible()
                                 && focus_guard.borrow_mut().should_hide(window.is_active())
                             {
                                 window.set_visible(false);
                             }
-                            glib::ControlFlow::Break
                         }
                     ),
                 );
@@ -89,6 +88,21 @@ pub fn present_popup(window: &adw::ApplicationWindow, focus_guard: &RefCell<Focu
     sync_popup_size(window);
     install_size_logger(window);
     window.present();
+    // A bar click can return focus on button-release after the surface maps.
+    // Reclaim it once when that launch gesture is over; later focus loss is a
+    // genuine outside interaction and dismisses normally.
+    glib::timeout_add_local_once(
+        std::time::Duration::from_millis(LAUNCH_GESTURE_MS),
+        clone!(
+            #[weak]
+            window,
+            move || {
+                if window.is_visible() && !window.is_active() {
+                    window.present();
+                }
+            }
+        ),
+    );
 }
 
 /// Measure content and pin default + size-request to the final natural size

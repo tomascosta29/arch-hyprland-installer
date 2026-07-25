@@ -162,6 +162,10 @@ fn open_settings(
     notify_sw.set_active(config.show_notification);
     box_.append(&switch_row("Show notification", &notify_sw));
 
+    let sound_sw = gtk4::Switch::new();
+    sound_sw.set_active(config.play_sound);
+    box_.append(&switch_row("Play shutter sound", &sound_sw));
+
     let open_sw = gtk4::Switch::new();
     open_sw.set_active(config.open_manager_after_capture);
     box_.append(&switch_row("Open manager after capture", &open_sw));
@@ -179,6 +183,7 @@ fn open_settings(
             naming_pattern: pattern_entry.text().to_string(),
             copy_to_clipboard: copy_sw.is_active(),
             show_notification: notify_sw.is_active(),
+            play_sound: sound_sw.is_active(),
             open_manager_after_capture: open_sw.is_active(),
         };
         match backend.save_config(&config) {

@@ -1,21 +1,27 @@
-//! Ignore inactive notifications until a newly shown window was focused.
+//! Deterministic popup focus lifecycle.
 //!
-//! Bar / panel launches often flash `is-active` then immediately lose focus to
-//! the click-release on the panel. Focus events during the present-grace must
-//! not arm dismiss — only focus *after* the grace period counts.
+//! A popup must first become active before focus loss can dismiss it. This
+//! ignores harmless inactive notifications emitted while a Wayland surface is
+//! mapping without relying on timing or mouse position.
 
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
-const PRESENT_GRACE: Duration = Duration::from_millis(450);
-pub const FOCUS_LOSS_DEBOUNCE_MS: u32 = 200;
+pub const LAUNCH_GESTURE_MS: u64 = 200;
+const LAUNCH_GESTURE: Duration = Duration::from_millis(LAUNCH_GESTURE_MS);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FocusState {
+    Hidden,
+    AwaitingFocus,
+    Focused,
+}
 
 #[derive(Debug)]
 pub struct FocusLossGuard {
-    /// True only after `is-active` while *outside* the present grace window.
-    seen_focus_after_grace: bool,
-    ignore_until: Option<Instant>,
-    /// Generation bumped on present / regain-focus so stale hide timers no-op.
+    state: FocusState,
+    ignore_loss_until: Option<Instant>,
+    /// Bumped whenever a pending focus-loss check must be invalidated.
     pub generation: Cell<u64>,
 }
 
@@ -28,8 +34,8 @@ impl Default for FocusLossGuard {
 impl Clone for FocusLossGuard {
     fn clone(&self) -> Self {
         Self {
-            seen_focus_after_grace: self.seen_focus_after_grace,
-            ignore_until: self.ignore_until,
+            state: self.state,
+            ignore_loss_until: self.ignore_loss_until,
             generation: Cell::new(self.generation.get()),
         }
     }
@@ -38,71 +44,83 @@ impl Clone for FocusLossGuard {
 impl FocusLossGuard {
     pub fn new() -> Self {
         Self {
-            seen_focus_after_grace: false,
-            ignore_until: None,
+            state: FocusState::Hidden,
+            ignore_loss_until: None,
             generation: Cell::new(0),
         }
     }
 
-    /// Call when the overlay is shown so bar-click focus races are ignored.
     pub fn presented(&mut self) {
-        self.seen_focus_after_grace = false;
-        self.ignore_until = Some(Instant::now() + PRESENT_GRACE);
-        self.generation.set(self.generation.get().wrapping_add(1));
+        self.state = FocusState::AwaitingFocus;
+        self.ignore_loss_until = Some(Instant::now() + LAUNCH_GESTURE);
+        self.bump_generation();
     }
 
     pub fn visibility_changed(&mut self, visible: bool) {
         if !visible {
-            self.seen_focus_after_grace = false;
-            self.ignore_until = None;
-            self.generation.set(self.generation.get().wrapping_add(1));
+            self.state = FocusState::Hidden;
+            self.ignore_loss_until = None;
+            self.bump_generation();
         }
     }
 
+    /// Returns true once a popup that genuinely held focus becomes inactive.
     pub fn should_hide(&mut self, active: bool) -> bool {
-        if let Some(until) = self.ignore_until {
-            if Instant::now() < until {
-                // Do not arm dismiss from focus flashes while opening.
-                return false;
-            }
-            self.ignore_until = None;
-        }
-
         if active {
-            self.seen_focus_after_grace = true;
-            self.generation.set(self.generation.get().wrapping_add(1));
+            self.state = FocusState::Focused;
+            self.bump_generation();
             return false;
         }
 
-        self.seen_focus_after_grace
+        if self
+            .ignore_loss_until
+            .is_some_and(|until| Instant::now() < until)
+        {
+            return false;
+        }
+        self.ignore_loss_until = None;
+        self.state == FocusState::Focused
+    }
+
+    fn bump_generation(&self) {
+        self.generation
+            .set(self.generation.get().wrapping_add(1));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
 
     #[test]
-    fn waits_for_first_focus_after_grace() {
+    fn ignores_inactive_mapping_noise_until_focused() {
         let mut guard = FocusLossGuard::new();
+        guard.presented();
+        assert!(!guard.should_hide(false));
         assert!(!guard.should_hide(false));
         assert!(!guard.should_hide(true));
+        guard.ignore_loss_until = None;
         assert!(guard.should_hide(false));
-        guard.visibility_changed(false);
-        assert!(!guard.should_hide(false));
     }
 
     #[test]
-    fn focus_during_grace_does_not_arm_dismiss() {
+    fn focus_regain_invalidates_pending_dismiss() {
         let mut guard = FocusLossGuard::new();
         guard.presented();
         assert!(!guard.should_hide(true));
-        assert!(!guard.should_hide(false));
-        thread::sleep(PRESENT_GRACE + Duration::from_millis(20));
-        // Still inactive after grace — never hide until focused post-grace.
-        assert!(!guard.should_hide(false));
-        assert!(!guard.should_hide(true));
+        guard.ignore_loss_until = None;
         assert!(guard.should_hide(false));
+        let pending_generation = guard.generation.get();
+        assert!(!guard.should_hide(true));
+        assert_ne!(guard.generation.get(), pending_generation);
+    }
+
+    #[test]
+    fn hidden_popup_cannot_be_dismissed_again() {
+        let mut guard = FocusLossGuard::new();
+        guard.presented();
+        assert!(!guard.should_hide(true));
+        guard.visibility_changed(false);
+        assert!(!guard.should_hide(false));
     }
 }
