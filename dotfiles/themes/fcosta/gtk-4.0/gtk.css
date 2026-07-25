@@ -1,11 +1,114 @@
-/* fcosta Nordfox GTK4 / Libadwaita Theme */
+/* fcosta Nordfox — Libadwaita / GTK4 named colors */
+:root {
+    --window-bg-color: #192330;
+    --window-fg-color: #cdcecf;
+
+    --view-bg-color: #192330;
+    --view-fg-color: #cdcecf;
+
+    --headerbar-bg-color: #212e3f;
+    --headerbar-fg-color: #cdcecf;
+    --headerbar-border-color: #cdcecf;
+    --headerbar-backdrop-color: #192330;
+    --headerbar-shade-color: rgb(0 0 0 / 36%);
+    --headerbar-darker-shade-color: rgb(0 0 0 / 90%);
+
+    --sidebar-bg-color: #212e3f;
+    --sidebar-fg-color: #cdcecf;
+    --sidebar-backdrop-color: #192330;
+    --sidebar-border-color: rgb(0 0 0 / 36%);
+    --sidebar-shade-color: rgb(0 0 0 / 25%);
+
+    --secondary-sidebar-bg-color: #29394f;
+    --secondary-sidebar-fg-color: #cdcecf;
+    --secondary-sidebar-backdrop-color: #212e3f;
+    --secondary-sidebar-border-color: rgb(0 0 0 / 36%);
+    --secondary-sidebar-shade-color: rgb(0 0 0 / 25%);
+
+    --card-bg-color: #212e3f;
+    --card-fg-color: #cdcecf;
+    --card-shade-color: rgb(0 0 0 / 36%);
+
+    --dialog-bg-color: #212e3f;
+    --dialog-fg-color: #cdcecf;
+
+    --popover-bg-color: #212e3f;
+    --popover-fg-color: #cdcecf;
+    --popover-shade-color: rgb(0 0 0 / 25%);
+
+    --thumbnail-bg-color: #29394f;
+    --thumbnail-fg-color: #cdcecf;
+
+    --overview-bg-color: #212e3f;
+    --overview-fg-color: #cdcecf;
+
+    --active-toggle-bg-color: rgb(255 255 255 / 20%);
+    --active-toggle-fg-color: #cdcecf;
+
+    --accent-bg-color: #719cd6;
+    --accent-fg-color: #192330;
+    --accent-color: #86abdc;
+
+    --destructive-bg-color: #c94f6d;
+    --destructive-fg-color: #ffffff;
+    --destructive-color: #c94f6d;
+
+    --success-bg-color: #81b29a;
+    --success-fg-color: #192330;
+    --success-color: #81b29a;
+
+    --warning-bg-color: #dbc074;
+    --warning-fg-color: rgb(0 0 0 / 80%);
+    --warning-color: #dbc074;
+
+    --error-bg-color: #c94f6d;
+    --error-fg-color: #ffffff;
+    --error-color: #c94f6d;
+
+    --shade-color: rgb(0 0 0 / 25%);
+    --scrollbar-outline-color: rgb(0 0 0 / 50%);
+}
+
+/* GTK named-color aliases for consumers that still resolve @define-color. */
 @define-color window_bg_color #192330;
 @define-color window_fg_color #CDCECF;
-@define-color accent_bg_color #719CD6;
-@define-color accent_fg_color #192330;
-@define-color card_bg_color #212E3F;
-@define-color card_fg_color #CDCECF;
-@define-color dialog_bg_color #192330;
-@define-color popover_bg_color #212E3F;
 @define-color view_bg_color #192330;
 @define-color view_fg_color #CDCECF;
+@define-color headerbar_bg_color #212E3F;
+@define-color headerbar_fg_color #CDCECF;
+@define-color headerbar_border_color #CDCECF;
+@define-color headerbar_backdrop_color #192330;
+@define-color headerbar_shade_color rgba(0, 0, 0, 0.36);
+@define-color headerbar_darker_shade_color rgba(0, 0, 0, 0.9);
+@define-color sidebar_bg_color #212E3F;
+@define-color sidebar_fg_color #CDCECF;
+@define-color sidebar_backdrop_color #192330;
+@define-color sidebar_border_color rgba(0, 0, 0, 0.36);
+@define-color sidebar_shade_color rgba(0, 0, 0, 0.25);
+@define-color secondary_sidebar_bg_color #29394F;
+@define-color secondary_sidebar_fg_color #CDCECF;
+@define-color secondary_sidebar_backdrop_color #212E3F;
+@define-color secondary_sidebar_border_color rgba(0, 0, 0, 0.36);
+@define-color secondary_sidebar_shade_color rgba(0, 0, 0, 0.25);
+@define-color card_bg_color #212E3F;
+@define-color card_fg_color #CDCECF;
+@define-color card_shade_color rgba(0, 0, 0, 0.36);
+@define-color dialog_bg_color #212E3F;
+@define-color dialog_fg_color #CDCECF;
+@define-color popover_bg_color #212E3F;
+@define-color popover_fg_color #CDCECF;
+@define-color popover_shade_color rgba(0, 0, 0, 0.25);
+@define-color thumbnail_bg_color #29394F;
+@define-color thumbnail_fg_color #CDCECF;
+@define-color accent_bg_color #719CD6;
+@define-color accent_fg_color #192330;
+@define-color destructive_bg_color #C94F6D;
+@define-color destructive_fg_color #FFFFFF;
+@define-color success_bg_color #81B29A;
+@define-color success_fg_color #192330;
+@define-color warning_bg_color #DBC074;
+@define-color warning_fg_color rgba(0, 0, 0, 0.8);
+@define-color error_bg_color #C94F6D;
+@define-color error_fg_color #FFFFFF;
+@define-color shade_color rgba(0, 0, 0, 0.25);
+@define-color scrollbar_outline_color rgba(0, 0, 0, 0.5);

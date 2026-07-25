@@ -1,11 +1,113 @@
-/* Catppuccin Macchiato GTK4 / Libadwaita Theme */
+/* Catppuccin Macchiato — Libadwaita / GTK4 named colors */
+:root {
+    --window-bg-color: #24273a;
+    --window-fg-color: #cad3f5;
+
+    --view-bg-color: #24273a;
+    --view-fg-color: #cad3f5;
+
+    --headerbar-bg-color: #363a4f;
+    --headerbar-fg-color: #cad3f5;
+    --headerbar-border-color: #cad3f5;
+    --headerbar-backdrop-color: #24273a;
+    --headerbar-shade-color: rgb(0 0 0 / 36%);
+    --headerbar-darker-shade-color: rgb(0 0 0 / 90%);
+
+    --sidebar-bg-color: #363a4f;
+    --sidebar-fg-color: #cad3f5;
+    --sidebar-backdrop-color: #24273a;
+    --sidebar-border-color: rgb(0 0 0 / 36%);
+    --sidebar-shade-color: rgb(0 0 0 / 25%);
+
+    --secondary-sidebar-bg-color: #494d64;
+    --secondary-sidebar-fg-color: #cad3f5;
+    --secondary-sidebar-backdrop-color: #363a4f;
+    --secondary-sidebar-border-color: rgb(0 0 0 / 36%);
+    --secondary-sidebar-shade-color: rgb(0 0 0 / 25%);
+
+    --card-bg-color: #363a4f;
+    --card-fg-color: #cad3f5;
+    --card-shade-color: rgb(0 0 0 / 36%);
+
+    --dialog-bg-color: #363a4f;
+    --dialog-fg-color: #cad3f5;
+
+    --popover-bg-color: #363a4f;
+    --popover-fg-color: #cad3f5;
+    --popover-shade-color: rgb(0 0 0 / 25%);
+
+    --thumbnail-bg-color: #494d64;
+    --thumbnail-fg-color: #cad3f5;
+
+    --overview-bg-color: #363a4f;
+    --overview-fg-color: #cad3f5;
+
+    --active-toggle-bg-color: rgb(255 255 255 / 20%);
+    --active-toggle-fg-color: #cad3f5;
+
+    --accent-bg-color: #89b4fa;
+    --accent-fg-color: #24273a;
+    --accent-color: #8aadf4;
+
+    --destructive-bg-color: #ed8796;
+    --destructive-fg-color: #24273a;
+    --destructive-color: #ed8796;
+
+    --success-bg-color: #a6da95;
+    --success-fg-color: #24273a;
+    --success-color: #a6da95;
+
+    --warning-bg-color: #eed49f;
+    --warning-fg-color: rgb(0 0 0 / 80%);
+    --warning-color: #eed49f;
+
+    --error-bg-color: #ed8796;
+    --error-fg-color: #24273a;
+    --error-color: #ed8796;
+
+    --shade-color: rgb(0 0 0 / 25%);
+    --scrollbar-outline-color: rgb(0 0 0 / 50%);
+}
+
 @define-color window_bg_color #24273a;
-@define-color window_fg_color #cad3f5;
-@define-color accent_bg_color #89b4fa;
-@define-color accent_fg_color #24273a;
-@define-color card_bg_color #363a4f;
-@define-color card_fg_color #cad3f5;
-@define-color dialog_bg_color #24273a;
-@define-color popover_bg_color #363a4f;
+@define-color window_fg_color #CAD3F5;
 @define-color view_bg_color #24273a;
-@define-color view_fg_color #cad3f5;
+@define-color view_fg_color #CAD3F5;
+@define-color headerbar_bg_color #363A4F;
+@define-color headerbar_fg_color #CAD3F5;
+@define-color headerbar_border_color #CAD3F5;
+@define-color headerbar_backdrop_color #24273A;
+@define-color headerbar_shade_color rgba(0, 0, 0, 0.36);
+@define-color headerbar_darker_shade_color rgba(0, 0, 0, 0.9);
+@define-color sidebar_bg_color #363A4F;
+@define-color sidebar_fg_color #CAD3F5;
+@define-color sidebar_backdrop_color #24273A;
+@define-color sidebar_border_color rgba(0, 0, 0, 0.36);
+@define-color sidebar_shade_color rgba(0, 0, 0, 0.25);
+@define-color secondary_sidebar_bg_color #494D64;
+@define-color secondary_sidebar_fg_color #CAD3F5;
+@define-color secondary_sidebar_backdrop_color #363A4F;
+@define-color secondary_sidebar_border_color rgba(0, 0, 0, 0.36);
+@define-color secondary_sidebar_shade_color rgba(0, 0, 0, 0.25);
+@define-color card_bg_color #363A4F;
+@define-color card_fg_color #CAD3F5;
+@define-color card_shade_color rgba(0, 0, 0, 0.36);
+@define-color dialog_bg_color #363A4F;
+@define-color dialog_fg_color #CAD3F5;
+@define-color popover_bg_color #363A4F;
+@define-color popover_fg_color #CAD3F5;
+@define-color popover_shade_color rgba(0, 0, 0, 0.25);
+@define-color thumbnail_bg_color #494D64;
+@define-color thumbnail_fg_color #CAD3F5;
+@define-color accent_bg_color #89B4FA;
+@define-color accent_fg_color #24273A;
+@define-color destructive_bg_color #ED8796;
+@define-color destructive_fg_color #24273A;
+@define-color success_bg_color #A6DA95;
+@define-color success_fg_color #24273A;
+@define-color warning_bg_color #EED49F;
+@define-color warning_fg_color rgba(0, 0, 0, 0.8);
+@define-color error_bg_color #ED8796;
+@define-color error_fg_color #24273A;
+@define-color shade_color rgba(0, 0, 0, 0.25);
+@define-color scrollbar_outline_color rgba(0, 0, 0, 0.5);

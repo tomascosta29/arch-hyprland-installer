@@ -90,6 +90,7 @@ Rectangle {
             height: 48
             echoMode: TextInput.Password
             placeholderText: "Password"
+            placeholderTextColor: config.foregroundDim || "#738091"
             color: config.foreground || "#cdcecf"
             font.pixelSize: 16
             leftPadding: 14

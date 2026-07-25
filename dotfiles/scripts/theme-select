@@ -53,18 +53,57 @@ atomic_symlink() {
 
 validate_theme() {
     local required_variable
+    local gtk_css="${TARGET_THEME}/gtk-4.0/gtk.css"
 
     for required_variable in \
-        background foreground foreground-dim soft-blue soft-red; do
+        background background-alt1 background-alt2 background-alt3 background-alt4 \
+        foreground foreground-dim \
+        soft-blue soft-cyan soft-green soft-yellow soft-peach soft-lavender \
+        soft-red soft-grey; do
         grep -Eq "^@define-color ${required_variable} #[A-Fa-f0-9]{6};" \
             "${TARGET_THEME}/colors.css" ||
             die "Theme '${THEME}' has an invalid or missing '${required_variable}' color."
+    done
+    for required_variable in \
+        --window-bg-color --window-fg-color \
+        --sidebar-bg-color --sidebar-fg-color \
+        --popover-bg-color --popover-fg-color \
+        --headerbar-bg-color --headerbar-fg-color \
+        --view-bg-color --view-fg-color \
+        --accent-bg-color --accent-fg-color; do
+        grep -Fq "${required_variable}:" "${gtk_css}" ||
+            die "Theme '${THEME}' GTK CSS is missing '${required_variable}'."
     done
     grep -Eq '^hl\.config\(\{' "${TARGET_THEME}/colors.lua" ||
         die "Theme '${THEME}' does not contain a Hyprland Lua configuration."
     if command -v luac >/dev/null 2>&1; then
         luac -p "${TARGET_THEME}/colors.lua" ||
             die "Theme '${THEME}' has invalid Lua syntax."
+    fi
+}
+
+write_gtk_settings() {
+    local settings_dir settings_file settings_temp
+
+    for settings_dir in "${CONFIG_DIR}/gtk-3.0" "${CONFIG_DIR}/gtk-4.0"; do
+        mkdir -p "${settings_dir}"
+        settings_file="${settings_dir}/settings.ini"
+        settings_temp="${settings_dir}/.settings.ini.theme.$$"
+        cat > "${settings_temp}" <<'EOF'
+[Settings]
+gtk-application-prefer-dark-theme=1
+EOF
+        chmod 0644 "${settings_temp}"
+        mv -f "${settings_temp}" "${settings_file}"
+    done
+}
+
+apply_gtk_color_scheme() {
+    write_gtk_settings
+    if command -v gsettings >/dev/null 2>&1 &&
+        [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+        gsettings set org.gnome.desktop.interface color-scheme prefer-dark \
+            >/dev/null 2>&1 || true
     fi
 }
 
@@ -113,6 +152,7 @@ atomic_symlink "${THEME_STATE_DIR}/current-theme/wallpaper.png" \
     "${CONFIG_DIR}/hypr/current_wallpaper.png"
 
 atomic_symlink "${TARGET_THEME}" "${THEME_STATE_DIR}/current-theme"
+apply_gtk_color_scheme
 
 hyprpaper_temp="$(mktemp "${CONFIG_DIR}/hypr/.hyprpaper.conf.XXXXXX")"
 cat > "${hyprpaper_temp}" <<HYPRPAPER

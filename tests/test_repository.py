@@ -1,5 +1,6 @@
 import json
 import re
+import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -184,6 +185,79 @@ class ThemeTests(unittest.TestCase):
             missing = [relative for relative in required if not (theme / relative).is_file()]
             self.assertFalse(missing, f"{theme.name} is missing {missing}")
 
+    def test_gtk_themes_define_libadwaita_surfaces(self):
+        required_vars = {
+            "--window-bg-color",
+            "--window-fg-color",
+            "--sidebar-bg-color",
+            "--sidebar-fg-color",
+            "--popover-bg-color",
+            "--popover-fg-color",
+            "--headerbar-bg-color",
+            "--headerbar-fg-color",
+            "--view-bg-color",
+            "--view-fg-color",
+            "--accent-bg-color",
+            "--accent-fg-color",
+        }
+        themes_dir = REPOSITORY_ROOT / "dotfiles" / "themes"
+        for gtk_css in themes_dir.glob("*/gtk-4.0/gtk.css"):
+            content = gtk_css.read_text()
+            missing = [name for name in required_vars if f"{name}:" not in content]
+            self.assertFalse(missing, f"{gtk_css.parent.parent.name} GTK CSS lacks {missing}")
+            self.assertIn("@define-color popover_fg_color", content)
+            self.assertIn("@define-color sidebar_bg_color", content)
+
+    def test_theme_select_forces_prefer_dark(self):
+        selector = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "theme-select").read_text()
+        self.assertIn("gtk-application-prefer-dark-theme=1", selector)
+        self.assertIn("color-scheme prefer-dark", selector)
+        self.assertIn("apply_gtk_color_scheme", selector)
+
+    def test_theme_select_validates_full_waybar_color_set(self):
+        selector = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "theme-select").read_text()
+        for variable in (
+            "background",
+            "background-alt1",
+            "background-alt2",
+            "background-alt3",
+            "background-alt4",
+            "foreground",
+            "foreground-dim",
+            "soft-blue",
+            "soft-cyan",
+            "soft-green",
+            "soft-yellow",
+            "soft-peach",
+            "soft-lavender",
+            "soft-red",
+            "soft-grey",
+        ):
+            self.assertRegex(
+                selector,
+                rf"\b{re.escape(variable)}\b",
+                f"theme-select must validate Waybar color '{variable}'",
+            )
+
+    def test_theme_select_publishes_stable_consumer_destinations(self):
+        selector = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "theme-select").read_text()
+        destinations = (
+            'hypr/current_colors.lua"',
+            'hypr/current_lock.conf"',
+            'hypr/current_wallpaper.png"',
+            'waybar/colors.css"',
+            'kitty/kitty-theme.conf"',
+            'rofi/rofi-theme.rasi"',
+            'dunst/dunstrc"',
+            'gtk-4.0/gtk.css"',
+        )
+        for destination in destinations:
+            self.assertIn(
+                destination,
+                selector,
+                f"theme-select must publish {destination.rstrip(chr(34))}",
+            )
+
     def test_waybar_theme_variables_exist(self):
         required_variables = {
             "background",
@@ -231,6 +305,36 @@ class ConfigurationTests(unittest.TestCase):
             parsed = self.load_jsonc(waybar_dir / filename)
             self.assertIsInstance(parsed, dict)
 
+    def test_waybar_include_chain(self):
+        config = self.load_jsonc(REPOSITORY_ROOT / "dotfiles" / "waybar" / "config.jsonc")
+        self.assertEqual(
+            config["include"],
+            [
+                "~/.config/waybar/modules",
+                "~/.config/waybar/profile.jsonc",
+                "~/.config/waybar/user.jsonc",
+            ],
+        )
+
+    def test_waybar_and_hypr_costa_flags_resolve(self):
+        sys.path.insert(0, str(REPOSITORY_ROOT / "dotfiles" / "costa-utils"))
+        from costautils.dispatch import resolve_target
+
+        consumers = (
+            (REPOSITORY_ROOT / "dotfiles" / "waybar" / "modules").read_text(),
+            (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprland.lua").read_text(),
+        )
+        flags = set()
+        for content in consumers:
+            flags.update(re.findall(r"costa-utils\s+(--[a-z0-9-]+)", content))
+        self.assertTrue(flags, "expected costa-utils flags in Waybar/Hyprland")
+        for flag in sorted(flags):
+            self.assertEqual(
+                resolve_target(flag),
+                flag,
+                f"{flag} referenced by Waybar/Hyprland is not in the dispatch surface",
+            )
+
     def test_waybar_workspaces_are_numbered(self):
         modules = self.load_jsonc(REPOSITORY_ROOT / "dotfiles" / "waybar" / "modules")
         workspaces = modules["hyprland/workspaces"]
@@ -266,6 +370,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertTrue((theme_dir / "theme.conf").is_file())
         qml = (theme_dir / "Main.qml").read_text()
         self.assertRegex(qml, r"TextField\s*\{\s*id:\s*userField")
+        self.assertIn("placeholderTextColor:", qml)
         self.assertIn("property date now:", qml)
         self.assertIn("Timer {", qml)
         self.assertIn("Screen.width", qml)

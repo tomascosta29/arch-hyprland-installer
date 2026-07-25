@@ -78,7 +78,15 @@ check "Costa Utils entry point" test -x "${HOME}/.local/bin/costa-utils"
 check "Costa Utils application" test -f "${DATA_DIR}/costa-utils/costa_utils.py"
 check "Hyprland Lua config" test -f "${CONFIG_DIR}/hypr/hyprland.lua"
 check "transactional theme pointer" test -L "${CONFIG_DIR}/costa/current-theme"
+check "GTK4 theme CSS" test -e "${CONFIG_DIR}/gtk-4.0/gtk.css"
+check "GTK prefer-dark settings" \
+    grep -Fq 'gtk-application-prefer-dark-theme=1' "${CONFIG_DIR}/gtk-4.0/settings.ini"
 check "Waybar profile state" grep -Fxq "${PROFILE}" "${CONFIG_DIR}/costa/install-profile"
+
+if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && command -v gsettings >/dev/null 2>&1; then
+    check "GNOME color-scheme prefer-dark" \
+        bash -c '[[ "$(gsettings get org.gnome.desktop.interface color-scheme)" == *"prefer-dark"* ]]'
+fi
 
 if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
     check "Hyprland session target active" \
@@ -120,4 +128,4 @@ if ((FAILURES > 0)); then
     printf '\n%d installed-system check(s) failed.\n' "${FAILURES}" >&2
     exit 1
 fi
-printf '\nInstalled ${PROFILE} workstation validation passed.\n'
+printf '\nInstalled %s workstation validation passed.\n' "${PROFILE}"

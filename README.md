@@ -240,6 +240,8 @@ journalctl --user -b --no-pager
 - `dotfiles/waybar` — bar config, modules, and style.
 - `dotfiles/costa-utils` — GTK4 desktop utility suite.
 - `tests` — unit and repository-invariant tests.
+- `INTERFACES.md` — stable contracts between desktop components (theme packs,
+  Waybar, session, costa-utils CLI, deploy layout).
 - `POLISH.md` — the expert runtime/architecture review and implementation record.
 
 Wallpaper provenance is recorded in [ASSETS.md](ASSETS.md). Code licensing still
