@@ -1,6 +1,5 @@
 import json
 import re
-import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -70,6 +69,10 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("KEYBOARD_LAYOUT", self.installer)
         self.assertIn("CLOCK_FORMAT", self.installer)
         self.assertIn("desktop-settings", self.installer)
+
+    def test_installer_offers_flavor_selection(self):
+        self.assertIn('INSTALL_FLAVOR="full"', self.installer)
+        self.assertIn("Installation flavor (full/light)", self.installer)
 
     def test_installer_remains_interactive(self):
         self.assertNotIn("COSTA_INSTALL_NONINTERACTIVE", self.installer)
@@ -165,7 +168,11 @@ class InstallerTests(unittest.TestCase):
 
     def test_installer_seeds_deployment_ownership_manifest(self):
         self.assertIn('MANIFEST_FILE="${MANIFEST_DIR}/managed-files"', self.installer)
-        self.assertIn("'BIN\tcosta-utils'", self.installer)
+        self.assertIn("install_costa_utils", self.installer)
+        self.assertIn("scripts/lib/costa-utils.sh", self.installer)
+        helper = (REPOSITORY_ROOT / "scripts" / "lib" / "costa-utils.sh").read_text()
+        self.assertIn(r"BIN\tcosta-utils", helper)
+        self.assertIn(r"BIN\tqs-activity", self.installer)
 
 
 class ThemeTests(unittest.TestCase):
@@ -350,9 +357,6 @@ class ConfigurationTests(unittest.TestCase):
             self.assertTrue((qs_dir / required).is_file(), required)
 
     def test_quickshell_and_hypr_costa_flags_resolve(self):
-        sys.path.insert(0, str(REPOSITORY_ROOT / "dotfiles" / "costa-utils"))
-        from costautils.dispatch import resolve_target
-
         consumers = (
             (REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa" / "Bar.qml").read_text(),
             (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprland.lua").read_text(),
@@ -362,11 +366,14 @@ class ConfigurationTests(unittest.TestCase):
             flags.update(re.findall(r'root\.costa,\s*"(--[a-z0-9-]+)"', content))
             flags.update(re.findall(r"costa-utils\s+(--[a-z0-9-]+)", content))
         self.assertTrue(flags, "expected costa-utils flags in Quickshell/Hyprland")
+        target_rs = (
+            REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "target.rs"
+        ).read_text()
         for flag in sorted(flags):
-            self.assertEqual(
-                resolve_target(flag),
+            self.assertIn(
                 flag,
-                f"{flag} referenced by Quickshell/Hyprland is not in the dispatch surface",
+                target_rs,
+                f"{flag} referenced by Quickshell/Hyprland is not in the Rust CLI surface",
             )
 
     def test_quickshell_workspaces_are_numbered(self):
@@ -500,7 +507,7 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_runner_history_is_private(self):
         source = (
-            REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "costautils" / "app_menu.py"
+            REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "backends" / "apps.rs"
         ).read_text()
         self.assertIn("0o600", source)
         self.assertIn("is_private_runner_command", source)
@@ -508,14 +515,14 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_window_capture_uses_json_geometry(self):
         source = (
-            REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "costautils" / "blinker.py"
+            REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "backends" / "blinker.rs"
         ).read_text()
         self.assertIn('["hyprctl", "-j", "activewindow"]', source)
         self.assertIn("No active window geometry", source)
         self.assertNotIn('re.search(r"at:', source)
 
     def test_svg_icons_are_well_formed(self):
-        icons_dir = REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "icons"
+        icons_dir = REPOSITORY_ROOT / "costa-utils" / "assets" / "icons"
         for icon in icons_dir.glob("*.svg"):
             ET.parse(icon)
 
@@ -525,7 +532,8 @@ class ConfigurationTests(unittest.TestCase):
             "CONFIG_COMPONENTS=(dunst hypr kitty quickshell rofi scripts systemd themes)",
             deployer,
         )
-        self.assertIn("dotfiles/costa-utils", deployer)
+        self.assertIn("install_costa_utils", deployer)
+        self.assertIn("scripts/lib/costa-utils.sh", deployer)
         self.assertIn("dotfiles/mimeapps.list", deployer)
         self.assertIn("systemctl --user daemon-reload", deployer)
         self.assertIn('"${BIN_DIR}/costa-utils" --shutdown', deployer)
@@ -534,6 +542,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("remove_previous_manifest", deployer)
         self.assertIn("qs-activity", deployer)
         self.assertNotIn('pkill -f "${BIN_DIR}/costa-utils"', deployer)
+        self.assertNotIn("costa_utils.py", deployer)
 
     def test_quickshell_vm_profile_omits_bare_metal_sensors(self):
         vm = self.load_json(
@@ -561,19 +570,16 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn("sync_sddm_theme", selector)
 
     def test_costa_utils_has_bounded_shared_backends(self):
-        backends = REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "costautils" / "backends"
-        jobs = (backends / "jobs.py").read_text()
-        media = (backends / "media.py").read_text()
-        bluetooth = (backends / "bluetooth.py").read_text()
-        network = (backends / "network.py").read_text()
-        self.assertIn("ThreadPoolExecutor", jobs)
-        self.assertIn(
-            "max_workers=4",
-            (REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "costa_utils.py").read_text(),
-        )
+        backends = REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "backends"
+        command = (REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "command.rs").read_text()
+        media = (backends / "media.rs").read_text()
+        bluetooth = (backends / "bluetooth.rs").read_text()
+        network = (backends / "network.rs").read_text()
+        self.assertIn("wait_timeout", command)
+        self.assertIn("Duration::from_secs(15)", command)
         self.assertIn("MAX_ARTWORK_BYTES", media)
-        for operation in ("Pair", "Trusted", "StopDiscovery", "RemoveDevice"):
-            self.assertIn(operation, bluetooth)
+        for operation in ("pair", "connect", "disconnect", "start_discovery"):
+            self.assertIn(f"fn {operation}", bluetooth)
         for field in ("BSSID", "SECURITY", "IN-USE"):
             self.assertIn(field, network)
 
@@ -590,9 +596,11 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn('leaf = "borderAngle"', config)
 
     def test_costa_utils_uses_gl_fallback_without_amdgpu(self):
-        launcher = (REPOSITORY_ROOT / "dotfiles" / "costa-utils" / "costa_utils.py").read_text()
-        self.assertIn('os.environ.setdefault("GSK_RENDERER", "cairo")', launcher)
-        self.assertIn('os.environ.setdefault("GSK_RENDERER", "gl")', launcher)
+        launcher = (
+            REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-ui" / "src" / "app.rs"
+        ).read_text()
+        self.assertIn('std::env::set_var("GSK_RENDERER", "cairo")', launcher)
+        self.assertIn('std::env::set_var("GSK_RENDERER", "gl")', launcher)
 
 
 if __name__ == "__main__":

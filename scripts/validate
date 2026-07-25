@@ -8,11 +8,13 @@ cd "${REPOSITORY_ROOT}"
 
 bash_files=(
     install.sh
+    scripts/build-release.sh
     scripts/create-vm
     scripts/deploy-user
     scripts/vm-smoke
+    scripts/lib/costa-utils.sh
+    costa-utils/scripts/install-user.sh
     dotfiles/scripts/*
-    dotfiles/costa-utils/uninstall.sh
 )
 bash -n "${bash_files[@]}"
 
@@ -20,10 +22,18 @@ command -v ruff >/dev/null 2>&1 || {
     printf 'Error: ruff is required for Python validation.\n' >&2
     exit 1
 }
-ruff format --check dotfiles/costa-utils tests
-ruff check dotfiles/costa-utils tests
+ruff format --check tests
+ruff check tests
 
 PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -v
+
+if command -v cargo >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "${HOME}/.cargo/env" 2>/dev/null || true
+    cargo test --manifest-path costa-utils/Cargo.toml --workspace
+else
+    printf 'Warning: cargo is unavailable; skipping costa-utils Rust tests.\n' >&2
+fi
 
 if command -v luac >/dev/null 2>&1; then
     while IFS= read -r -d '' lua_file; do
@@ -33,7 +43,7 @@ else
     printf 'Warning: luac is unavailable; skipping Lua syntax validation.\n' >&2
 fi
 
-desktop_file="dotfiles/costa-utils/applications/org.fcosta.CostaUtils.desktop"
+desktop_file="costa-utils/assets/applications/org.fcosta.CostaUtils.desktop"
 if command -v desktop-file-validate >/dev/null 2>&1; then
     desktop-file-validate "${desktop_file}"
 else

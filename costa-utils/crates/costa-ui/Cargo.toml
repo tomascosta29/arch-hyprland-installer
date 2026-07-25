@@ -1,0 +1,19 @@
+[package]
+name = "costa-ui"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+description = "GTK4/libadwaita UI for Costa Utils"
+publish = false
+
+[dependencies]
+costa-core.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+gtk4.workspace = true
+adw.workspace = true
+gdk-pixbuf.workspace = true
+glib.workspace = true
+gio.workspace = true
+serde_json.workspace = true

@@ -15,7 +15,7 @@ jobs:
       - name: Install validation dependencies
         run: >-
           pacman -Syu --noconfirm --needed
-          git python python-gobject gtk4 libadwaita
+          git python rust pkgconf gtk4 libadwaita
           ruff lua desktop-file-utils shellcheck
 
       - uses: actions/checkout@v4

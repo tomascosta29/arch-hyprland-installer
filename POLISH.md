@@ -1,5 +1,9 @@
 # Technical polish review
 
+> Historical note: the Python `dotfiles/costa-utils` suite was replaced by the
+> Rust workspace at [`./costa-utils`](costa-utils/). Paths below that mention
+> `*.py` refer to the pre-cutover tree.
+
 Reviewed: 2026-07-24
 
 ## Implementation status

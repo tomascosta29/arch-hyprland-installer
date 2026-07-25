@@ -1,0 +1,17 @@
+[package]
+name = "costa-core"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+description = "Shared logic for Costa Utils desktop overlays"
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+dirs.workspace = true
+wait-timeout.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

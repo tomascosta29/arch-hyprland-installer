@@ -76,7 +76,7 @@ Scope {
             }
 
             implicitHeight: Colors.barHeight
-            exclusiveZone: Colors.barHeight + Colors.barMargin
+            exclusiveZone: Colors.barHeight
             color: "transparent"
 
             Bar {

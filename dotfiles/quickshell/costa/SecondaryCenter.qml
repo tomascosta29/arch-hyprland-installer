@@ -191,7 +191,7 @@ Item {
         anchors.fill: parent
         enabled: root.mode === "context" && root.context.address !== ""
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: Hyprland.dispatch("focuswindow address:" + root.context.address)
+        onClicked: Hyprland.dispatch("hl.dispatch(\"focuswindow\", \"address:" + root.context.address + "\")")
     }
 
     Row {

@@ -58,7 +58,7 @@ Rectangle {
     implicitWidth: telemetryRow.implicitWidth + 20
     implicitHeight: 36
     radius: height / 2
-    color: Qt.rgba(Colors.backgroundAlt.r, Colors.backgroundAlt.g, Colors.backgroundAlt.b, 0.52)
+    color: Qt.rgba(Colors.softBlue.r, Colors.softBlue.g, Colors.softBlue.b, 0.15)
 
     function rateText(bytesPerSecond) {
         if (bytesPerSecond < 1024)

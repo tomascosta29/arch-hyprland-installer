@@ -39,8 +39,8 @@ Item {
         anchors.fill: parent
         radius: Colors.pillRadius
         border.width: 1
-        border.color: Qt.rgba(0.298, 0.337, 0.416, 0.72)
-        color: Qt.rgba(0.18, 0.204, 0.251, 0.94)
+        border.color: Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.08)
+        color: Qt.rgba(Colors.background.r, Colors.background.g, Colors.background.b, 0.85)
 
         Rectangle {
             anchors {
@@ -113,7 +113,7 @@ Item {
             implicitWidth: sessionRow.implicitWidth + 14
             implicitHeight: 36
             radius: height / 2
-            color: Qt.rgba(Colors.backgroundAlt.r, Colors.backgroundAlt.g, Colors.backgroundAlt.b, 0.52)
+            color: Qt.rgba(Colors.softBlue.r, Colors.softBlue.g, Colors.softBlue.b, 0.15)
 
             Row {
                 id: sessionRow

@@ -2,7 +2,7 @@
 
 An opinionated Arch Linux workstation installer for AMD systems and QEMU/KVM
 guests. It installs Hyprland, a coherent Wayland desktop, themed dotfiles, and
-the GTK4 `costa-utils` suite.
+the Rust GTK4 `costa-utils` suite.
 
 > [!CAUTION]
 > `install.sh` is destructive. It replaces the partition table on the selected
@@ -47,6 +47,22 @@ There is one default tool for each core job:
 | Audio | PipeWire + WirePlumber |
 | Package updates | Pacman + `checkupdates` |
 | System monitor | htop in Kitty |
+
+## Release Flavors
+
+The installer supports two distinct release flavors:
+
+| Flavor | Default Shell | Neovim Setup | Profile Characteristics |
+|---|---|---|---|
+| **Full** (default) | `zsh` with Oh My Zsh and plugins | Neovim with LazyVim starter pre-installed | Full-featured, opinionated configuration |
+| **Light** | `bash` | Stock Neovim, no pre-installed configs | Minimal, less opinionated, unbloated |
+
+During the interactive installation, you can confirm or select the desired flavor. Pre-packaged GitHub release archives (e.g. `arch-hyprland-installer-light.tar.gz`) default to their respective flavors and automatically exclude unneeded configuration assets.
+
+To package these releases locally:
+```bash
+./scripts/build-release.sh
+```
 
 ## Installation
 
@@ -238,7 +254,7 @@ journalctl --user -b --no-pager
 - `dotfiles/systemd/user` — supervised graphical-session target and user units.
 - `dotfiles/themes` — complete theme bundles.
 - `dotfiles/quickshell` — Quickshell `costa` bar (replaces Waybar).
-- `dotfiles/costa-utils` — GTK4 desktop utility suite.
+- `costa-utils` — Rust GTK4/libadwaita desktop utility suite (overlays + CLI).
 - `tests` — unit and repository-invariant tests.
 - `INTERFACES.md` — stable contracts between desktop components (theme packs,
   Quickshell, session, costa-utils CLI, deploy layout).

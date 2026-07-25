@@ -24,7 +24,7 @@ Item {
         implicitWidth: workspaceRow.implicitWidth + 16
         implicitHeight: 36
         radius: height / 2
-        color: Qt.rgba(Colors.backgroundAlt.r, Colors.backgroundAlt.g, Colors.backgroundAlt.b, 0.64)
+        color: Qt.rgba(Colors.softBlue.r, Colors.softBlue.g, Colors.softBlue.b, 0.15)
 
         Row {
             id: workspaceRow
@@ -57,19 +57,15 @@ Item {
                     Rectangle {
                         anchors.centerIn: parent
                         width: 34
-                        height: 34
-                        radius: height / 2
+                        height: 30
+                        radius: 10
                         color: {
                             if (workspace.urgent)
-                                return Colors.red;
-                            if (workspace.active)
-                                return Colors.accent;
+                                return Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.10);
                             if (workspaceMouse.containsMouse)
                                 return Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.08);
                             return "transparent";
                         }
-                        border.width: workspace.active || workspace.urgent ? 1 : 0
-                        border.color: Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.18)
 
                         Behavior on color {
                             ColorAnimation {
@@ -79,11 +75,16 @@ Item {
                     }
 
                     Text {
-                        anchors.centerIn: parent
+                        anchors {
+                            centerIn: parent
+                            verticalCenterOffset: -2
+                        }
                         text: workspace.modelData
                         color: {
-                            if (workspace.active || workspace.urgent)
-                                return Colors.foreground;
+                            if (workspace.urgent)
+                                return Colors.red;
+                            if (workspace.active)
+                                return Colors.accent;
                             if (workspace.occupied)
                                 return Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.90);
                             return Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.68);
@@ -91,6 +92,32 @@ Item {
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 14
                         font.weight: workspace.active ? Font.DemiBold : Font.Medium
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 120
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        anchors {
+                            horizontalCenter: parent.horizontalCenter
+                            bottom: parent.bottom
+                            bottomMargin: 3
+                        }
+                        width: workspace.active || workspace.urgent || workspace.occupied ? 20 : 0
+                        height: 3
+                        radius: height / 2
+                        color: workspace.urgent ? Colors.red : workspace.active ? Colors.accent : Colors.foreground
+                        opacity: 1
+
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: 150
+                                easing.type: Easing.OutCubic
+                            }
+                        }
 
                         Behavior on color {
                             ColorAnimation {
@@ -121,7 +148,7 @@ Item {
                         hoverEnabled: true
                         onClicked: Workspaces.activate(workspace.modelData)
                         onWheel: event => {
-                            Hyprland.dispatch(event.angleDelta.y > 0 ? "workspace e-1" : "workspace e+1");
+                            Hyprland.dispatch(event.angleDelta.y > 0 ? "hl.dsp.focus({ workspace = \"e-1\" })" : "hl.dsp.focus({ workspace = \"e+1\" })");
                         }
                     }
                 }

@@ -52,7 +52,9 @@ hl.config({
 
 hl.curve("costaEase", {
     type = "bezier",
-    points = { { 0.05, 0.9 }, { 0.1, 1.05 } },
+    -- Keep the curve at or below 1.0 so floating windows do not grow past
+    -- their final geometry and snap back at the end of the animation.
+    points = { { 0.05, 0.9 }, { 0.1, 1.0 } },
 })
 hl.animation({ leaf = "windows", enabled = true, speed = 7, bezier = "costaEase" })
 hl.animation({
@@ -72,6 +74,10 @@ hl.window_rule({
     match = { class = "^org\\.fcosta\\..*$" },
     float = true,
     center = true,
+    -- Keep opacity locked so inactive→active (0.95→1.0) does not flash.
+    no_blur = true,
+    opaque = true,
+    opacity = "1.0 override 1.0 override",
 })
 
 hl.layer_rule({
@@ -107,6 +113,18 @@ hl.bind(main_mod .. " + B", hl.dsp.exec_cmd(browser))
 hl.bind(main_mod .. " + V", hl.dsp.exec_cmd(costa_utils .. " --clipper"))
 hl.bind(main_mod .. " + P", hl.dsp.exec_cmd(costa_utils .. " --power-menu"))
 hl.bind(main_mod .. " + F", hl.dsp.window.fullscreen())
+hl.bind(main_mod .. " + space", function()
+    local win = hl.get_active_window()
+    if win then
+        if win.floating then
+            hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+        else
+            hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+            hl.dispatch(hl.dsp.window.resize({ x = 800, y = 600, relative = false }))
+            hl.dispatch(hl.dsp.window.center())
+        end
+    end
+end)
 hl.bind(main_mod .. " + R", hl.dsp.exec_cmd(costa_utils .. " --app-menu"))
 hl.bind(
     main_mod .. " + SUPER_L",
@@ -116,7 +134,7 @@ hl.bind(
 hl.bind(main_mod .. " + ALT + T", hl.dsp.exec_cmd(scripts .. "/theme-select"))
 hl.bind(main_mod .. " + ALT + M", hl.dsp.exec_cmd(scripts .. "/monitor-select"))
 hl.bind(main_mod .. " + ALT + K", hl.dsp.exec_cmd(scripts .. "/desktop-settings"))
-hl.bind("Print", hl.dsp.exec_cmd(costa_utils .. " --blinker"))
+hl.bind(main_mod .. " + Print", hl.dsp.exec_cmd(costa_utils .. " --blinker-area"))
 hl.bind(main_mod .. " + L", hl.dsp.exec_cmd("loginctl lock-session"))
 
 for key, direction in pairs({
@@ -130,6 +148,23 @@ for key, direction in pairs({
     down = "d",
 }) do
     hl.bind(main_mod .. " + " .. key, hl.dsp.focus({ direction = direction }))
+end
+
+for key, delta in pairs({
+    h = { x = -20, y = 0 },
+    l = { x = 20, y = 0 },
+    k = { x = 0, y = -20 },
+    j = { x = 0, y = 20 },
+    left = { x = -20, y = 0 },
+    right = { x = 20, y = 0 },
+    up = { x = 0, y = -20 },
+    down = { x = 0, y = 20 },
+}) do
+    hl.bind(
+        main_mod .. " + CTRL + " .. key,
+        hl.dsp.window.resize({ x = delta.x, y = delta.y, relative = true }),
+        { repeating = true }
+    )
 end
 
 for workspace = 1, 10 do

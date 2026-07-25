@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/costa-bin",
+    "crates/costa-core",
+    "crates/costa-ui",
+]
+default-members = ["crates/costa-bin"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["fcosta"]
+repository = "https://github.com/fcosta/costa-utils"
+
+[workspace.dependencies]
+costa-core = { path = "crates/costa-core" }
+costa-ui = { path = "crates/costa-ui" }
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "6"
+wait-timeout = "0.2"
+gtk4 = { version = "0.10", features = ["v4_14"] }
+adw = { package = "libadwaita", version = "0.8", features = ["v1_5"] }
+glib = "0.21"
+gio = "0.21"
+gdk-pixbuf = "0.21"

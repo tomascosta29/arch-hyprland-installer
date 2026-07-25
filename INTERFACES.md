@@ -187,7 +187,7 @@ Window rule: class `^org\.fcosta\..*$` → float + center.
 
 ## 5. costa-utils CLI / D-Bus
 
-**Binary:** `~/.local/bin/costa-utils` → `~/.local/share/costa-utils/costa_utils.py`  
+**Binary:** `~/.local/bin/costa-utils` (Rust release binary from `./costa-utils`)  
 **App id:** `org.fcosta.CostaUtils` (singleton; `--shutdown` quits for theme reload)
 
 ### Flags (dispatch surface)
@@ -236,7 +236,7 @@ packs directly.
 | Kind | Destination |
 |---|---|
 | `CONFIG` | `~/.config/{dunst,hypr,kitty,quickshell,rofi,scripts,systemd,themes}/` plus `mimeapps.list` |
-| `DATA` | `~/.local/share/costa-utils/` (+ desktop entry / icons) |
+| `DATA` | desktop entry + icons under `~/.local/share/` (+ `costa-utils/icons/`) |
 | `BIN` | `~/.local/bin/costa-utils`, `~/.local/bin/qs-activity` |
 
 Manifest: `~/.config/costa/managed-files` lines `KIND\trelative`. Deploy removes

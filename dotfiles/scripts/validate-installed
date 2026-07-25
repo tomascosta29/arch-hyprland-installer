@@ -76,7 +76,10 @@ fi
 
 check "Costa Utils entry point" test -x "${HOME}/.local/bin/costa-utils"
 check "qs-activity entry point" test -x "${HOME}/.local/bin/qs-activity"
-check "Costa Utils application" test -f "${DATA_DIR}/costa-utils/costa_utils.py"
+check "Costa Utils desktop entry" \
+    test -f "${DATA_DIR}/applications/org.fcosta.CostaUtils.desktop"
+check "Costa Utils icon" \
+    test -f "${DATA_DIR}/icons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg"
 check "Hyprland Lua config" test -f "${CONFIG_DIR}/hypr/hyprland.lua"
 check "Quickshell shell entry" test -f "${CONFIG_DIR}/quickshell/costa/shell.qml"
 check "transactional theme pointer" test -L "${CONFIG_DIR}/costa/current-theme"
@@ -100,16 +103,12 @@ if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
     done
 fi
 
-if python - "${DATA_DIR}/costa-utils" "${CONFIG_DIR}/quickshell/costa" <<'PY'
-import ast
+if python - "${CONFIG_DIR}/quickshell/costa" <<'PY'
 import json
 from pathlib import Path
 import sys
 
-app_root = Path(sys.argv[1])
-qs_root = Path(sys.argv[2])
-for source in app_root.rglob("*.py"):
-    ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+qs_root = Path(sys.argv[1])
 for name in ("profile.json", "profile-bare-metal.json", "profile-vm.json", "user.json"):
     json.loads((qs_root / name).read_text(encoding="utf-8"))
 for required in ("shell.qml", "Bar.qml", "Colors.qml", "Profile.qml", "colors.css"):
@@ -120,9 +119,15 @@ if "@define-color background" not in palette:
     raise SystemExit("colors.css missing background")
 PY
 then
-    pass "Python and Quickshell installed syntax"
+    pass "Quickshell installed assets"
 else
-    fail "Python and Quickshell installed syntax"
+    fail "Quickshell installed assets"
+fi
+
+if "${HOME}/.local/bin/costa-utils" --help >/dev/null 2>&1; then
+    pass "Costa Utils --help"
+else
+    fail "Costa Utils --help"
 fi
 
 if command -v hyprctl >/dev/null 2>&1 &&

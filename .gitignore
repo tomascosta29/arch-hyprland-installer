@@ -12,6 +12,10 @@ Thumbs.db
 # Agent Local Notes (Uncommitted)
 AGENTS.md
 
+# Build & release artifacts
+dist/
+costa-utils/target/
+
 # Python generated files
 __pycache__/
 *.py[cod]

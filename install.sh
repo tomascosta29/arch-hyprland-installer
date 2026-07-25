@@ -11,6 +11,8 @@ readonly NC='\033[0m'
 readonly MIN_DISK_BYTES=$((20 * 1024 * 1024 * 1024))
 
 TARGET_MOUNTED=false
+INSTALL_FLAVOR="full"
+
 
 log() {
     printf '%b%s%b\n' "${GREEN}" "$1" "${NC}"
@@ -186,8 +188,16 @@ case "${INSTALL_PROFILE}" in
     *) die "Installation profile must be 'bare-metal' or 'vm'." ;;
 esac
 
+read -r -p \
+    "Installation flavor (full/light) [${INSTALL_FLAVOR}]: " SELECTED_FLAVOR
+INSTALL_FLAVOR="${SELECTED_FLAVOR:-${INSTALL_FLAVOR}}"
+if [[ "${INSTALL_FLAVOR}" != "full" && "${INSTALL_FLAVOR}" != "light" ]]; then
+    die "Installation flavor must be 'full' or 'light'."
+fi
+
 read -r -p "Target whole disk (for example /dev/vda or /dev/nvme1n1): " DISK
 read -r -p "Hostname [${DEFAULT_HOSTNAME}]: " HOSTNAME
+
 HOSTNAME="${HOSTNAME:-${DEFAULT_HOSTNAME}}"
 read -r -p "Username [fcosta]: " USERNAME
 USERNAME="${USERNAME:-fcosta}"
@@ -265,11 +275,11 @@ COMMON_PACKAGES=(
     sddm nautilus gvfs gvfs-mtp udisks2 gnome-keyring
     desktop-file-utils file-roller
     firefox
-    python python-gobject python-cairo gtk4 libadwaita
-    gobject-introspection upower cliphist
+    rust pkgconf gtk4 libadwaita
+    upower cliphist
     grim slurp wl-clipboard brightnessctl libnotify
     pacman-contrib htop lm_sensors man-db man-pages
-    jq curl libpulse
+    jq curl libpulse python
     ttf-jetbrains-mono-nerd otf-font-awesome
     noto-fonts noto-fonts-emoji noto-fonts-cjk papirus-icon-theme
 )
@@ -286,8 +296,13 @@ case "${INSTALL_PROFILE}" in
         ;;
 esac
 
+FLAVOR_PACKAGES=()
+if [[ "${INSTALL_FLAVOR}" == "full" ]]; then
+    FLAVOR_PACKAGES+=(zsh)
+fi
+
 log "[4/7] Installing Arch and the ${INSTALL_PROFILE} workstation package set..."
-pacstrap -K /mnt "${COMMON_PACKAGES[@]}" "${PROFILE_PACKAGES[@]}"
+pacstrap -K /mnt "${COMMON_PACKAGES[@]}" "${PROFILE_PACKAGES[@]}" "${FLAVOR_PACKAGES[@]}"
 
 log "[5/7] Generating /etc/fstab..."
 mkdir -p /mnt/etc
@@ -300,7 +315,7 @@ grep -Eq '[[:space:]]/boot[[:space:]]' /mnt/etc/fstab ||
 log "[6/7] Configuring the installed system..."
 arch-chroot /mnt /bin/bash -s -- \
     "${HOSTNAME}" "${USERNAME}" "${TIMEZONE}" "${KEYBOARD_LAYOUT}" \
-    "${INSTALL_PROFILE}" <<'CHROOT'
+    "${INSTALL_PROFILE}" "${INSTALL_FLAVOR}" <<'CHROOT'
 set -Eeuo pipefail
 
 readonly INSTALL_HOSTNAME=$1
@@ -308,6 +323,7 @@ readonly INSTALL_USERNAME=$2
 readonly INSTALL_TIMEZONE=$3
 readonly INSTALL_KEYBOARD=$4
 readonly INSTALL_PROFILE=$5
+readonly INSTALL_FLAVOR=$6
 readonly USER_HOME="/home/${INSTALL_USERNAME}"
 
 ln -sf "/usr/share/zoneinfo/${INSTALL_TIMEZONE}" /etc/localtime
@@ -334,7 +350,11 @@ cat > /etc/hosts <<HOSTS
 127.0.1.1 ${INSTALL_HOSTNAME}.localdomain ${INSTALL_HOSTNAME}
 HOSTS
 
-useradd --create-home --groups wheel --shell /bin/bash "${INSTALL_USERNAME}"
+if [[ "${INSTALL_FLAVOR}" == "full" ]]; then
+    useradd --create-home --groups wheel --shell /bin/zsh "${INSTALL_USERNAME}"
+else
+    useradd --create-home --groups wheel --shell /bin/bash "${INSTALL_USERNAME}"
+fi
 passwd --lock root
 
 printf '%%wheel ALL=(ALL:ALL) ALL\n' > /etc/sudoers.d/10-wheel
@@ -395,24 +415,44 @@ while IFS= read -r -d '' dotfile_entry; do
     cp -a "${dotfile_entry}" "${USER_HOME}/.config/"
 done < <(
     find "${SCRIPT_DIR}/dotfiles" -mindepth 1 -maxdepth 1 \
-        ! -name costa-utils ! -name sddm ! -name mimeapps.list -print0
+        ! -name sddm ! -name mimeapps.list ! -name zshrc -print0
 )
 
-cp -a "${SCRIPT_DIR}/dotfiles/costa-utils" \
-    "${USER_HOME}/.local/share/costa-utils"
-ln -sfn "../share/costa-utils/costa_utils.py" \
-    "${USER_HOME}/.local/bin/costa-utils"
 ln -sfn "${USER_HOME}/.config/quickshell/costa/scripts/qs-activity" \
     "${USER_HOME}/.local/bin/qs-activity"
-mkdir -p "${USER_HOME}/.local/share/applications"
-cp -a \
-    "${SCRIPT_DIR}/dotfiles/costa-utils/applications/org.fcosta.CostaUtils.desktop" \
-    "${USER_HOME}/.local/share/applications/"
-mkdir -p "${USER_HOME}/.local/share/icons/hicolor/scalable/apps"
-cp -a "${SCRIPT_DIR}/dotfiles/costa-utils/icons/costa_utils.svg" \
-    "${USER_HOME}/.local/share/icons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg"
 mkdir -p "${USER_HOME}/.config"
 cp -a "${SCRIPT_DIR}/dotfiles/mimeapps.list" "${USER_HOME}/.config/mimeapps.list"
+
+if [[ "${INSTALL_FLAVOR}" == "full" ]]; then
+    log "Configuring Zsh, Oh My Zsh, plugins, and LazyVim..."
+
+    # Deploy custom zshrc if available
+    if [[ -f "${SCRIPT_DIR}/dotfiles/zshrc" ]]; then
+        cp "${SCRIPT_DIR}/dotfiles/zshrc" "${USER_HOME}/.zshrc"
+    fi
+
+    # Clone Oh My Zsh
+    git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "${USER_HOME}/.oh-my-zsh" ||
+        warn "Could not clone Oh My Zsh. Skipping."
+
+    # Clone plugins if Oh My Zsh was successfully cloned
+    if [[ -d "${USER_HOME}/.oh-my-zsh" ]]; then
+        mkdir -p "${USER_HOME}/.oh-my-zsh/custom/plugins"
+        git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git \
+            "${USER_HOME}/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" ||
+            warn "Could not clone zsh-syntax-highlighting."
+        git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions.git \
+            "${USER_HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" ||
+            warn "Could not clone zsh-autosuggestions."
+    fi
+
+    # Clone LazyVim starter
+    git clone --depth=1 https://github.com/LazyVim/starter "${USER_HOME}/.config/nvim" ||
+        warn "Could not clone LazyVim starter."
+    if [[ -d "${USER_HOME}/.config/nvim" ]]; then
+        rm -rf "${USER_HOME}/.config/nvim/.git"
+    fi
+fi
 
 # Seed the same ownership manifest consumed by scripts/deploy-user. A later
 # deployment can therefore remove files retired after the initial installation
@@ -430,17 +470,24 @@ for component in dunst hypr kitty quickshell rofi scripts systemd themes; do
     done < <(find "${source_root}" \( -type f -o -type l \) -print0)
 done
 printf 'CONFIG\tmimeapps.list\n' >> "${MANIFEST_FILE}"
-source_root="${SCRIPT_DIR}/dotfiles/costa-utils"
-while IFS= read -r -d '' source; do
-    relative="${source#"${source_root}/"}"
-    [[ "${relative}" != */__pycache__/* && "${relative}" != *.pyc ]] || continue
-    printf 'DATA\tcosta-utils/%s\n' "${relative}" >> "${MANIFEST_FILE}"
-done < <(find "${source_root}" \( -type f -o -type l \) -print0)
-printf '%s\n' \
-    'DATA	applications/org.fcosta.CostaUtils.desktop' \
-    'DATA	icons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg' \
-    'BIN	costa-utils' \
-    'BIN	qs-activity' >> "${MANIFEST_FILE}"
+
+# Build costa-utils on the live installer (needs cargo + GTK devel headers)
+# if a pre-compiled binary is not present, then install the binary and desktop assets.
+if [[ ! -x "${SCRIPT_DIR}/costa-utils/bin/costa-utils" ]]; then
+    if ! command -v cargo >/dev/null 2>&1; then
+        log "Installing rust toolchain on the live installer to build costa-utils..."
+        pacman -Sy --noconfirm --needed rust pkgconf gtk4 libadwaita
+    fi
+fi
+# shellcheck source=scripts/lib/costa-utils.sh
+source "${SCRIPT_DIR}/scripts/lib/costa-utils.sh"
+HOME="${USER_HOME}" install_costa_utils \
+    "${SCRIPT_DIR}" \
+    "${USER_HOME}/.local/bin" \
+    "${USER_HOME}/.local/share" \
+    "${MANIFEST_FILE}" ||
+    die "Failed to build/install costa-utils."
+printf 'BIN\tqs-activity\n' >> "${MANIFEST_FILE}"
 chmod 0644 "${MANIFEST_FILE}"
 
 # Install the matched SDDM greeter theme and seed it with the default wallpaper.
@@ -464,8 +511,7 @@ readonly USER_HOME="/home/${INSTALL_USERNAME}"
 
 find "${USER_HOME}/.config/scripts" -type f -exec chmod 0755 {} +
 find "${USER_HOME}/.config/quickshell/costa/scripts" -type f -exec chmod 0755 {} +
-chmod 0755 "${USER_HOME}/.local/share/costa-utils/costa_utils.py"
-chmod 0755 "${USER_HOME}/.local/share/costa-utils/uninstall.sh"
+chmod 0755 "${USER_HOME}/.local/bin/costa-utils" "${USER_HOME}/.local/bin/qs-activity"
 chown -R "${INSTALL_USERNAME}:${INSTALL_USERNAME}" "${USER_HOME}"
 
 runuser -u "${INSTALL_USERNAME}" -- env \

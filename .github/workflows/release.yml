@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Upload Release Flavors
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build dependencies
+        run: >-
+          pacman -Syu --noconfirm --needed
+          git rust pkgconf gtk4 libadwaita tar gzip github-cli
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build release packages
+        run: ./scripts/build-release.sh
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.event.release.tag_name }} \
+            dist/arch-hyprland-installer-full.tar.gz \
+            dist/arch-hyprland-installer-light.tar.gz \
+            --clobber
