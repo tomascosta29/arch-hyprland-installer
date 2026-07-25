@@ -71,10 +71,10 @@ validate_theme() {
         --headerbar-bg-color --headerbar-fg-color \
         --view-bg-color --view-fg-color \
         --accent-bg-color --accent-fg-color; do
-        grep -Fq "${required_variable}:" "${gtk_css}" ||
+        grep -Fq -- "${required_variable}:" "${gtk_css}" ||
             die "Theme '${THEME}' GTK CSS is missing '${required_variable}'."
     done
-    grep -Eq '^hl\.config\(\{' "${TARGET_THEME}/colors.lua" ||
+    grep -Eq -- '^hl\.config\(\{' "${TARGET_THEME}/colors.lua" ||
         die "Theme '${THEME}' does not contain a Hyprland Lua configuration."
     if command -v luac >/dev/null 2>&1; then
         luac -p "${TARGET_THEME}/colors.lua" ||

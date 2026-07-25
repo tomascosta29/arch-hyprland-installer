@@ -220,6 +220,14 @@ class ThemeTests(unittest.TestCase):
         self.assertIn("color-scheme prefer-dark", selector)
         self.assertIn("apply_gtk_color_scheme", selector)
 
+    def test_theme_select_greps_css_variables_safely(self):
+        selector = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "theme-select").read_text()
+        self.assertIn('grep -Fq -- "${required_variable}:"', selector)
+        self.assertNotRegex(
+            selector,
+            r'grep -Fq "\$\{required_variable\}:"',
+        )
+
     def test_theme_select_validates_full_palette_color_set(self):
         selector = (REPOSITORY_ROOT / "dotfiles" / "scripts" / "theme-select").read_text()
         for variable in (
