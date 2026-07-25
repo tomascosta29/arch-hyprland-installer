@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Remote bootstrap installer for Arch Hyprland Workstation.
 # Run directly from standard Arch Linux ISO terminal:
-#   curl -sL https://raw.githubusercontent.com/tomascosta29/arch-hyprland-installer/quickshell/bootstrap.sh | bash
+#   curl -s https://arch.tomascosta.pt | bash
 
 set -Eeuo pipefail
 

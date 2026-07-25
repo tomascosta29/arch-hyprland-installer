@@ -1,0 +1,11 @@
+{
+  "name": "arch-installer-redirect",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-01",
+  "routes": [
+    {
+      "pattern": "arch.tomascosta.pt",
+      "custom_domain": true
+    }
+  ]
+}
