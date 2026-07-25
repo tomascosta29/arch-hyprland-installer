@@ -6,6 +6,7 @@ use std::path::Path;
 /// Overlay / action the running app should present.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Target {
+    Daemon,
     AppMenu,
     Runner,
     Blinker,
@@ -24,6 +25,7 @@ impl Target {
     /// Canonical `--flag` form used by the Python original and desktop file.
     pub fn flag(self) -> &'static str {
         match self {
+            Self::Daemon => "--daemon",
             Self::AppMenu => "--app-menu",
             Self::Runner => "--runner",
             Self::Blinker => "--blinker",
@@ -41,6 +43,7 @@ impl Target {
 
     pub fn all() -> &'static [Target] {
         &[
+            Self::Daemon,
             Self::AppMenu,
             Self::Runner,
             Self::Blinker,
@@ -65,6 +68,7 @@ impl Target {
 
         let normalized = key.to_ascii_lowercase();
         let matched = match normalized.as_str() {
+            "--daemon" | "daemon" => Self::Daemon,
             "--app-menu" | "app-menu" | "appmenu" => Self::AppMenu,
             "--runner" | "runner" => Self::Runner,
             "--blinker" | "blinker" => Self::Blinker,
@@ -96,7 +100,7 @@ impl Target {
     }
 }
 
-pub const USAGE: &str = "Usage: costa-utils [--app-menu | --runner | --blinker | --blinker-area | --blinker-manager | --clipper | --power-menu | --network-menu | --bluetooth-menu | --volume-menu | --control-center | --shutdown]";
+pub const USAGE: &str = "Usage: costa-utils [--daemon | --app-menu | --runner | --blinker | --blinker-area | --blinker-manager | --clipper | --power-menu | --network-menu | --bluetooth-menu | --volume-menu | --control-center | --shutdown]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CliMode {
@@ -129,6 +133,7 @@ mod tests {
     #[test]
     fn parses_flags_and_aliases() {
         assert_eq!(Target::parse("--power-menu").unwrap(), Target::PowerMenu);
+        assert_eq!(Target::parse("--daemon").unwrap(), Target::Daemon);
         assert_eq!(Target::parse("power").unwrap(), Target::PowerMenu);
         assert_eq!(Target::parse("appmenu").unwrap(), Target::AppMenu);
         assert!(Target::parse("nope").is_err());

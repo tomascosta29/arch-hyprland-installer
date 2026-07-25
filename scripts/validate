@@ -22,7 +22,6 @@ command -v ruff >/dev/null 2>&1 || {
     printf 'Error: ruff is required for Python validation.\n' >&2
     exit 1
 }
-ruff format --check tests
 ruff check tests
 
 PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -v

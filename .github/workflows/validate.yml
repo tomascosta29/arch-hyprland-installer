@@ -20,5 +20,8 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory "*"
+
       - name: Validate repository
         run: ./scripts/validate

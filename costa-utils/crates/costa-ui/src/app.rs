@@ -116,6 +116,9 @@ fn activate_target(app: &adw::Application, state: &AppState, target: Target) {
     info!(target = target.flag(), "activate");
     let mut windows = state.windows.borrow_mut();
     match target {
+        Target::Daemon => {
+            info!("resident service ready");
+        }
         Target::Shutdown => app.quit(),
         Target::PowerMenu => {
             if windows.power.is_none() {

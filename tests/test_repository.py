@@ -633,6 +633,21 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn("follow_mouse = 1", input_config)
         self.assertNotIn("follow_mouse = 1", settings)
 
+    def test_costa_utils_is_supervised_by_user_systemd(self):
+        service = (
+            REPOSITORY_ROOT / "dotfiles" / "systemd" / "user" / "costa-utils.service"
+        ).read_text()
+        target = (
+            REPOSITORY_ROOT / "dotfiles" / "systemd" / "user" / "hyprland-session.target"
+        ).read_text()
+        cli = (
+            REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-core" / "src" / "target.rs"
+        ).read_text()
+        self.assertIn("ExecStart=%h/.local/bin/costa-utils --daemon", service)
+        self.assertIn("SyslogIdentifier=costa-utils", service)
+        self.assertIn("Wants=costa-utils.service", target)
+        self.assertIn('"--daemon"', cli)
+
     def test_costa_utils_uses_gl_fallback_without_amdgpu(self):
         launcher = (
             REPOSITORY_ROOT / "costa-utils" / "crates" / "costa-ui" / "src" / "app.rs"

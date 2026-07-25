@@ -8,7 +8,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Instant;
-use tracing::debug;
+use tracing::{debug, info};
 
 pub fn install_popup_dismiss(window: &adw::ApplicationWindow, focus_guard: Rc<RefCell<FocusLossGuard>>) {
     let key = gtk4::EventControllerKey::new();
@@ -17,8 +17,9 @@ pub fn install_popup_dismiss(window: &adw::ApplicationWindow, focus_guard: Rc<Re
         window,
         #[upgrade_or]
         return glib::Propagation::Proceed,
-        move |_, keyval, _, _| {
+            move |_, keyval, _, _| {
             if keyval == gdk::Key::Escape {
+                info!(title = ?window.title(), reason = "escape", "popup dismissed");
                 window.set_visible(false);
                 glib::Propagation::Stop
             } else {
@@ -29,6 +30,7 @@ pub fn install_popup_dismiss(window: &adw::ApplicationWindow, focus_guard: Rc<Re
     window.add_controller(key);
 
     window.connect_close_request(|win| {
+        info!(title = ?win.title(), reason = "close-request", "popup dismissed");
         win.set_visible(false);
         glib::Propagation::Stop
     });
@@ -41,6 +43,7 @@ pub fn install_popup_dismiss(window: &adw::ApplicationWindow, focus_guard: Rc<Re
             #[weak]
             window,
             move |win, _| {
+                info!(title = ?win.title(), active = win.is_active(), "popup activation changed");
                 if !focus_guard.borrow_mut().should_hide(win.is_active()) {
                     return;
                 }
@@ -62,6 +65,11 @@ pub fn install_popup_dismiss(window: &adw::ApplicationWindow, focus_guard: Rc<Re
                             if window.is_visible()
                                 && focus_guard.borrow_mut().should_hide(window.is_active())
                             {
+                                info!(
+                                    title = ?window.title(),
+                                    reason = "focus-loss",
+                                    "popup dismissed"
+                                );
                                 window.set_visible(false);
                             }
                         }
@@ -84,6 +92,7 @@ pub fn install_popup_dismiss(window: &adw::ApplicationWindow, focus_guard: Rc<Re
 }
 
 pub fn present_popup(window: &adw::ApplicationWindow, focus_guard: &RefCell<FocusLossGuard>) {
+    info!(title = ?window.title(), "popup presented");
     focus_guard.borrow_mut().presented();
     sync_popup_size(window);
     install_size_logger(window);

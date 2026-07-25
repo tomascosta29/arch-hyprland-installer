@@ -1,0 +1,12 @@
+[Unit]
+Description=Costa desktop utilities
+PartOf=hyprland-session.target
+After=hyprland-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/costa-utils --daemon
+Environment=COSTA_UTILS_LOG_LEVEL=info
+Restart=on-failure
+RestartSec=1s
+SyslogIdentifier=costa-utils

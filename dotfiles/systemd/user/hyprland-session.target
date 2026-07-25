@@ -11,5 +11,6 @@ Wants=hyprsunset.service
 Wants=quickshell.service
 Wants=cliphist-image.service
 Wants=cliphist-text.service
+Wants=costa-utils.service
 After=graphical-session-pre.target
 PropagatesStopTo=graphical-session.target
