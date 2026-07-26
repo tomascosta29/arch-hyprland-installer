@@ -32,9 +32,11 @@ setopt INTERACTIVE_COMMENTS    # Allow inline comments in interactive shell
 autoload -Uz compinit
 compinit -d "${XDG_CACHE_HOME:-$HOME/.cache}/zcompdump-$ZSH_VERSION"
 
-# Case-insensitive tab completion (matching lower & uppercase)
-zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*'
-zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+# Completion colors: cyan for directories (di=36), magenta for symlinks, etc.
+if [[ -z "$LS_COLORS" ]] && command -v dircolors >/dev/null 2>&1; then
+    eval "$(dircolors -b)"
+fi
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS:-di=36:ln=35:so=32:pi=33:ex=31}"
 zstyle ':completion:*' use-cache on
 zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
 
