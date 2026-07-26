@@ -5,9 +5,9 @@ format = "$directory$git_branch$git_status$cmd_duration$character "
 add_newline = false
 
 [character]
-success_symbol = "[❯](bold green)"
-error_symbol = "[❯](bold red)"
-vimcmd_symbol = "[❮](bold yellow)"
+success_symbol = "[›](bold green)"
+error_symbol = "[›](bold red)"
+vimcmd_symbol = "[‹](bold yellow)"
 
 [directory]
 style = "bold cyan"
