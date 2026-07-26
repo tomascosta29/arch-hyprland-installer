@@ -1,15 +1,10 @@
-# Starship Prompt Configuration
+# Starship Prompt Configuration — Clean & Icon-Free
 
 format = """
 $directory\
 $git_branch\
 $git_status\
-$package\
-$golang\
-$nodejs\
-$rust\
-$python\
-$docker_context\
+$cmd_duration\
 $line_break\
 $character"""
 
@@ -24,47 +19,26 @@ vimcmd_symbol = "[❮](bold yellow)"
 style = "bold cyan"
 truncation_length = 3
 truncation_symbol = "…/"
-home_symbol = "󰋜 ~"
-read_only = " 󰌾"
+home_symbol = "~"
+read_only = " [RO]"
 
 [git_branch]
-symbol = "󰘬 "
 style = "bold purple"
-format = "on [$symbol$branch]($style) "
+format = "on [$branch]($style) "
 
 [git_status]
 style = "bold red"
 format = "([$all_status$ahead_behind]($style) )"
 conflicted = "="
-ahead = "⇡${count}"
-behind = "⇣${count}"
-diverged = "⇕⇡${ahead_count}⇣${behind_count}"
+ahead = "^${count}"
+behind = "v${count}"
+diverged = "^${ahead_count}v${behind_count}"
 untracked = "?"
 stashed = "$"
 modified = "!"
 staged = "+"
-renamed = "»"
-deleted = "✘"
-
-[package]
-symbol = "󰏗 "
-style = "dimmed yellow"
-
-[golang]
-symbol = " "
-style = "bold cyan"
-
-[nodejs]
-symbol = " "
-style = "bold green"
-
-[rust]
-symbol = " "
-style = "bold red"
-
-[python]
-symbol = " "
-style = "bold yellow"
+renamed = ">"
+deleted = "x"
 
 [cmd_duration]
 min_time = 2_000
