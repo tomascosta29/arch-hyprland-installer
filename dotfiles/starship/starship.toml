@@ -1,0 +1,71 @@
+# Starship Prompt Configuration
+
+format = """
+$directory\
+$git_branch\
+$git_status\
+$package\
+$golang\
+$nodejs\
+$rust\
+$python\
+$docker_context\
+$line_break\
+$character"""
+
+add_newline = true
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+vimcmd_symbol = "[❮](bold yellow)"
+
+[directory]
+style = "bold cyan"
+truncation_length = 3
+truncation_symbol = "…/"
+home_symbol = "󰋜 ~"
+read_only = " 󰌾"
+
+[git_branch]
+symbol = "󰘬 "
+style = "bold purple"
+format = "on [$symbol$branch]($style) "
+
+[git_status]
+style = "bold red"
+format = "([$all_status$ahead_behind]($style) )"
+conflicted = "="
+ahead = "⇡${count}"
+behind = "⇣${count}"
+diverged = "⇕⇡${ahead_count}⇣${behind_count}"
+untracked = "?"
+stashed = "$"
+modified = "!"
+staged = "+"
+renamed = "»"
+deleted = "✘"
+
+[package]
+symbol = "󰏗 "
+style = "dimmed yellow"
+
+[golang]
+symbol = " "
+style = "bold cyan"
+
+[nodejs]
+symbol = " "
+style = "bold green"
+
+[rust]
+symbol = " "
+style = "bold red"
+
+[python]
+symbol = " "
+style = "bold yellow"
+
+[cmd_duration]
+min_time = 2_000
+format = "took [$duration] (bold yellow) "

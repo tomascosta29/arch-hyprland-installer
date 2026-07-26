@@ -1,26 +1,113 @@
-# Path to your oh-my-zsh installation.
-export ZSH="${HOME}/.oh-my-zsh"
+# ==============================================================================
+# Zsh Configuration — Arch Hyprland Workstation
+# ==============================================================================
 
-# Set name of the theme to load
-ZSH_THEME="robbyrussell"
-
-# Which plugins would you like to load?
-# Standard plugins can be found in $ZSH/plugins/
-# Custom plugins may be added to $ZSH/custom/plugins/
-plugins=(
-    git
-    zsh-syntax-highlighting
-    zsh-autosuggestions
-)
-
-source $ZSH/oh-my-zsh.sh
-
-# User configuration
+# -- Environment & Paths -------------------------------------------------------
 export PATH="${HOME}/.local/bin:${PATH}"
+export EDITOR="nvim"
+export VISUAL="nvim"
 
-# Basic aliases
-alias ll='ls -la'
-alias la='ls -A'
-alias l='ls -CF'
-alias vi='nvim'
-alias vim='nvim'
+# Disable less history file
+export LESSHISTFILE="-"
+
+# -- History Configuration -----------------------------------------------------
+HISTFILE="${HOME}/.zsh_history"
+HISTSIZE=50000
+SAVEHIST=50000
+
+# Options
+setopt APPEND_HISTORY          # Append to history file on exit
+setopt SHARE_HISTORY           # Share history between all active sessions
+setopt INC_APPEND_HISTORY      # Write to history immediately, not when shell exits
+setopt HIST_IGNORE_ALL_DUPS    # Delete old duplicate entry if new entry is duplicate
+setopt HIST_IGNORE_SPACE       # Don't record commands starting with a space
+setopt HIST_SAVE_NO_DUPS       # Don't write duplicate entries in history file
+setopt HIST_REDUCE_BLANKS      # Remove unnecessary blanks from history
+setopt AUTO_CD                 # If command is a directory name, cd to it
+setopt AUTO_PUSHD              # Make cd push old directory to stack
+setopt PUSHD_IGNORE_DUPS       # Don't push duplicate directories to stack
+setopt INTERACTIVE_COMMENTS    # Allow inline comments in interactive shell
+
+# -- Completion System ---------------------------------------------------------
+autoload -Uz compinit
+compinit -d "${XDG_CACHE_HOME:-$HOME/.cache}/zcompdump-$ZSH_VERSION"
+
+# Case-insensitive tab completion (matching lower & uppercase)
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*'
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
+
+# -- Keybindings ---------------------------------------------------------------
+bindkey -e  # Emacs keybindings
+
+# Standard navigation keybindings
+bindkey '^[[H' beginning-of-line       # Home key
+bindkey '^[[F' end-of-line             # End key
+bindkey '^[[3~' delete-char            # Delete key
+bindkey '^[[1;5C' forward-word         # Ctrl + Right
+bindkey '^[[1;5D' backward-word        # Ctrl + Left
+bindkey '^?' backward-delete-char      # Backspace
+
+# -- Aliases & Utility Overrides -----------------------------------------------
+if command -v eza >/dev/null 2>&1; then
+    alias ls='eza --icons=always --group-directories-first'
+    alias ll='eza -la --icons=always --group-directories-first'
+    alias la='eza -a --icons=always --group-directories-first'
+    alias lt='eza --tree --level=2 --icons=always --group-directories-first'
+else
+    alias ll='ls -la'
+    alias la='ls -A'
+fi
+
+if command -v bat >/dev/null 2>&1; then
+    alias cat='bat --style=header,grid'
+fi
+
+if command -v ripgrep >/dev/null 2>&1 || command -v rg >/dev/null 2>&1; then
+    alias grep='rg'
+fi
+
+if command -v fd >/dev/null 2>&1; then
+    alias find='fd'
+fi
+
+alias g='git'
+alias gs='git status'
+alias gd='git diff'
+alias gl='git log --oneline --graph --decorate'
+
+# -- Tool Integrations ---------------------------------------------------------
+# FZF Integration
+if [[ -f /usr/share/fzf/key-bindings.zsh ]]; then
+    source /usr/share/fzf/key-bindings.zsh
+fi
+if [[ -f /usr/share/fzf/completion.zsh ]]; then
+    source /usr/share/fzf/completion.zsh
+fi
+
+# Zoxide (smart cd replacement)
+if command -v zoxide >/dev/null 2>&1; then
+    eval "$(zoxide init zsh)"
+fi
+
+# Zsh Autosuggestions
+if [[ -f /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
+    source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+    ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=8'
+fi
+
+# Zsh Syntax Highlighting (must be loaded last)
+if [[ -f /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
+    source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+fi
+
+# Starship Prompt
+if command -v starship >/dev/null 2>&1; then
+    eval "$(starship init zsh)"
+fi
+
+# -- Welcome Banner ------------------------------------------------------------
+if [[ $- == *i* ]] && command -v fastfetch >/dev/null 2>&1; then
+    fastfetch
+fi
