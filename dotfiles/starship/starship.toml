@@ -1,14 +1,8 @@
-# Starship Prompt Configuration — Clean & Icon-Free
+# Starship Prompt Configuration — Single Line Clean Format
 
-format = """
-$directory\
-$git_branch\
-$git_status\
-$cmd_duration\
-$line_break\
-$character"""
+format = """$directory $git_branch$git_status$cmd_duration$character """
 
-add_newline = true
+add_newline = false
 
 [character]
 success_symbol = "[❯](bold green)"
