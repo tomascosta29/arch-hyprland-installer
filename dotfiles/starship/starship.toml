@@ -1,6 +1,6 @@
-# Starship Prompt Configuration — Single Line Clean Format
+# Starship Prompt Configuration — Sleek & Compact Single Line
 
-format = """$directory $git_branch$git_status$cmd_duration$character """
+format = "$directory$git_branch$git_status$cmd_duration$character "
 
 add_newline = false
 
@@ -15,14 +15,15 @@ truncation_length = 3
 truncation_symbol = "…/"
 home_symbol = "~"
 read_only = " [RO]"
+format = "[$path]($style)"
 
 [git_branch]
 style = "bold purple"
-format = "on [$branch]($style) "
+format = " on [$branch]($style)"
 
 [git_status]
 style = "bold red"
-format = "([$all_status$ahead_behind]($style) )"
+format = " ([$all_status$ahead_behind]($style))"
 conflicted = "="
 ahead = "^${count}"
 behind = "v${count}"
@@ -36,4 +37,4 @@ deleted = "x"
 
 [cmd_duration]
 min_time = 2_000
-format = "took [$duration] (bold yellow) "
+format = " took [$duration]"
