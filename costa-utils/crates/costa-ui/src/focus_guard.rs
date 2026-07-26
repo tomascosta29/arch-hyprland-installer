@@ -1,7 +1,7 @@
-//! Compatibility marker retained by window structs.
+//! Compatibility marker retained by the popup window structs.
 //!
-//! Popup dismissal no longer depends on compositor focus events. The shared
-//! modal surface owns explicit backdrop and Escape dismissal instead.
+//! Dismissal is click-driven. Focus loss is not a usable signal under
+//! focus-follows-mouse compositors such as Hyprland.
 
 #[derive(Debug, Default, Clone)]
 pub struct FocusLossGuard;

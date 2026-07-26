@@ -9,7 +9,7 @@ use costa_core::backends::network::NetworkBackend;
 use costa_core::backends::nightlight::NightLightBackend;
 use costa_core::backends::power::{PowerAction, PowerBackend};
 use costa_core::command;
-use gtk4::{gdk, glib, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk4::glib;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -55,71 +55,118 @@ impl ControlCenterWindow {
         let window = adw::ApplicationWindow::builder()
             .application(app)
             .title("Control Menu")
-            .default_width(460)
-            .default_height(560)
+            .default_width(440)
+            .default_height(-1)
             .resizable(false)
             .build();
+        window.add_css_class("control-center");
 
         let toast = adw::ToastOverlay::new();
         window.set_content(Some(&toast));
         let view = adw::ToolbarView::new();
         toast.set_child(Some(&view));
         let header = adw::HeaderBar::new();
-        let title = gtk4::Label::new(None);
-        title.set_markup("<b>Control Center</b>");
-        header.set_title_widget(Some(&title));
+        header.add_css_class("cc-header");
+        header.set_show_title(true);
+        let heading = gtk4::Box::new(gtk4::Orientation::Vertical, 1);
+        heading.set_halign(gtk4::Align::Start);
+        let title = gtk4::Label::new(Some("Quick Settings"));
+        title.add_css_class("cc-title");
+        title.set_halign(gtk4::Align::Start);
+        let subtitle = gtk4::Label::new(Some("System controls"));
+        subtitle.add_css_class("cc-title-subtitle");
+        subtitle.set_halign(gtk4::Align::Start);
+        heading.append(&title);
+        heading.append(&subtitle);
+        header.set_title_widget(Some(&heading));
         view.add_top_bar(&header);
 
-        let main = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
-        main.set_margin_start(16);
-        main.set_margin_end(16);
-        main.set_margin_top(16);
-        main.set_margin_bottom(16);
+        let main = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        main.add_css_class("cc-main");
+        main.set_margin_start(22);
+        main.set_margin_end(22);
+        main.set_margin_top(2);
+        main.set_margin_bottom(18);
         view.set_content(Some(&main));
 
+        // —— Connectivity ——
+        main.append(&section_header("Connectivity"));
         let grid = gtk4::FlowBox::new();
+        grid.add_css_class("cc-grid");
         grid.set_selection_mode(gtk4::SelectionMode::None);
         grid.set_max_children_per_line(2);
         grid.set_min_children_per_line(2);
         grid.set_column_spacing(12);
         grid.set_row_spacing(12);
+        grid.set_homogeneous(true);
         main.append(&grid);
 
-        let wifi = make_toggle("network-wireless-symbolic", "Wi-Fi", "Disconnected");
-        let bt = make_toggle("bluetooth-active-symbolic", "Bluetooth", "Disabled");
-        let nl = make_toggle("night-light-symbolic", "Night Light", "Off");
-        let dnd = make_toggle("notifications-disabled-symbolic", "Do Not Disturb", "Off");
+        let wifi = make_toggle("network-wireless-symbolic", "Wi-Fi", "Disconnected", "wifi");
+        let bt = make_toggle("bluetooth-active-symbolic", "Bluetooth", "Disabled", "bt");
+        let nl = make_toggle("night-light-symbolic", "Night Light", "Off", "nightlight");
+        let dnd = make_toggle(
+            "notifications-disabled-symbolic",
+            "Do Not Disturb",
+            "Off",
+            "dnd",
+        );
         grid.append(&wifi.button);
         grid.append(&bt.button);
-        grid.append(&nl.button);
-        grid.append(&dnd.button);
 
-        let sliders = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
-        sliders.add_css_class("card-box");
+        // —— Appearance & Sound ——
+        main.append(&section_header("Appearance & Sound"));
+        let appearance = gtk4::FlowBox::new();
+        appearance.add_css_class("cc-grid");
+        appearance.set_selection_mode(gtk4::SelectionMode::None);
+        appearance.set_max_children_per_line(2);
+        appearance.set_min_children_per_line(2);
+        appearance.set_column_spacing(12);
+        appearance.set_row_spacing(12);
+        appearance.set_homogeneous(true);
+        main.append(&appearance);
+        appearance.append(&nl.button);
+        appearance.append(&dnd.button);
+
+        let sliders = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
+        sliders.add_css_class("cc-card");
+        sliders.add_css_class("cc-sliders");
         main.append(&sliders);
+
         let vol_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 100.0, 1.0);
+        vol_slider.add_css_class("cc-scale");
         vol_slider.set_draw_value(false);
         vol_slider.set_hexpand(true);
-        let vol_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        vol_row.append(&gtk4::Image::from_icon_name("audio-volume-high-symbolic"));
+        let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
+        vol_icon.set_pixel_size(20);
+        vol_icon.add_css_class("cc-row-icon");
+        vol_icon.add_css_class("cc-volume-icon");
+        let vol_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
+        vol_row.append(&vol_icon);
         vol_row.append(&vol_slider);
         sliders.append(&vol_row);
+
         let bright_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 100.0, 1.0);
+        bright_slider.add_css_class("cc-scale");
         bright_slider.set_draw_value(false);
         bright_slider.set_hexpand(true);
-        let bright_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        bright_row.append(&gtk4::Image::from_icon_name("display-brightness-symbolic"));
+        let bright_icon = gtk4::Image::from_icon_name("display-brightness-symbolic");
+        bright_icon.set_pixel_size(20);
+        bright_icon.add_css_class("cc-row-icon");
+        bright_icon.add_css_class("cc-brightness-icon");
+        let bright_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
+        bright_row.append(&bright_icon);
         bright_row.append(&bright_slider);
         sliders.append(&bright_row);
 
         let media_card = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        media_card.add_css_class("cc-card");
         media_card.add_css_class("media-card");
         media_card.set_visible(false);
         main.append(&media_card);
         let media_art = gtk4::Image::from_icon_name("audio-x-generic-symbolic");
         media_art.set_pixel_size(48);
         media_card.append(&media_art);
-        let info = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+        let info = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
         info.set_hexpand(true);
         let media_title = gtk4::Label::new(Some("Unknown Title"));
         media_title.set_halign(gtk4::Align::Start);
@@ -136,19 +183,28 @@ impl ControlCenterWindow {
         let next = gtk4::Button::from_icon_name("media-skip-forward-symbolic");
         for b in [&prev, &play_btn, &next] {
             b.add_css_class("flat");
+            b.add_css_class("cc-media-btn");
             controls.append(b);
         }
         media_card.append(&controls);
 
-        let session = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        session.add_css_class("card-box");
+        // —— System ——
+        main.append(&section_header("System"));
+        let session = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        session.add_css_class("cc-session");
         main.append(&session);
-        let lock = gtk4::Button::from_icon_name("system-lock-screen-symbolic");
-        lock.set_hexpand(true);
-        lock.add_css_class("power-action-btn");
-        let power_menu = gtk4::Button::from_icon_name("system-shutdown-symbolic");
-        power_menu.set_hexpand(true);
-        power_menu.add_css_class("power-action-btn");
+        let lock = make_session_card(
+            "system-lock-screen-symbolic",
+            "Lock",
+            "Lock Screen",
+            false,
+        );
+        let power_menu = make_session_card(
+            "system-shutdown-symbolic",
+            "Power",
+            "Power Menu",
+            true,
+        );
         session.append(&lock);
         session.append(&power_menu);
 
@@ -343,7 +399,6 @@ impl ControlCenterWindow {
 
         let focus_guard = Rc::new(RefCell::new(FocusLossGuard::new()));
         install_popup_dismiss(&window, focus_guard.clone());
-        load_css();
 
         Self {
             window,
@@ -359,13 +414,28 @@ impl ControlCenterWindow {
     }
 }
 
-fn make_toggle(icon: &str, title: &str, subtitle: &str) -> ToggleCard {
+fn section_header(title: &str) -> gtk4::Label {
+    let label = gtk4::Label::new(Some(title));
+    label.add_css_class("cc-section-header");
+    label.set_halign(gtk4::Align::Start);
+    label.set_xalign(0.0);
+    label
+}
+
+fn make_toggle(icon: &str, title: &str, subtitle: &str, kind: &str) -> ToggleCard {
     let button = gtk4::Button::new();
+    button.add_css_class("flat");
     button.add_css_class("toggle-card");
-    let box_ = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    box_.append(&gtk4::Image::from_icon_name(icon));
-    let labels = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    button.add_css_class("cc-card");
+    button.add_css_class(&format!("toggle-card-{kind}"));
+    let box_ = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
+    let image = gtk4::Image::from_icon_name(icon);
+    image.set_pixel_size(26);
+    image.add_css_class("toggle-icon");
+    box_.append(&image);
+    let labels = gtk4::Box::new(gtk4::Orientation::Vertical, 5);
     labels.set_hexpand(true);
+    labels.set_valign(gtk4::Align::Center);
     let title_l = gtk4::Label::new(Some(title));
     title_l.add_css_class("toggle-title");
     title_l.set_halign(gtk4::Align::Start);
@@ -383,13 +453,49 @@ fn make_toggle(icon: &str, title: &str, subtitle: &str) -> ToggleCard {
     }
 }
 
+fn make_session_card(icon: &str, title: &str, subtitle: &str, destructive: bool) -> gtk4::Button {
+    let button = gtk4::Button::new();
+    button.add_css_class("flat");
+    button.add_css_class("cc-card");
+    button.add_css_class("session-card");
+    button.add_css_class("toggle-card");
+    if destructive {
+        button.add_css_class("session-card-power");
+    }
+    button.set_hexpand(true);
+    let box_ = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
+    box_.set_halign(gtk4::Align::Start);
+    box_.set_valign(gtk4::Align::Center);
+    let image = gtk4::Image::from_icon_name(icon);
+    image.set_pixel_size(26);
+    image.add_css_class("toggle-icon");
+    if destructive {
+        image.add_css_class("session-icon");
+    }
+    box_.append(&image);
+    let labels = gtk4::Box::new(gtk4::Orientation::Vertical, 5);
+    labels.set_hexpand(true);
+    labels.set_valign(gtk4::Align::Center);
+    let title_l = gtk4::Label::new(Some(title));
+    title_l.add_css_class("toggle-title");
+    title_l.set_halign(gtk4::Align::Start);
+    let subtitle_l = gtk4::Label::new(Some(subtitle));
+    subtitle_l.add_css_class("toggle-subtitle");
+    subtitle_l.set_halign(gtk4::Align::Start);
+    labels.append(&title_l);
+    labels.append(&subtitle_l);
+    box_.append(&labels);
+    button.set_child(Some(&box_));
+    button
+}
+
 fn set_toggle(card: &ToggleCard, active: bool, subtitle: &str) {
     card.active.set(active);
     card.subtitle.set_label(subtitle);
     if active {
-        card.button.add_css_class("suggested-action");
+        card.button.add_css_class("toggle-card-active");
     } else {
-        card.button.remove_css_class("suggested-action");
+        card.button.remove_css_class("toggle-card-active");
     }
 }
 
@@ -523,43 +629,4 @@ fn apply_media(inner: &Inner, media: MediaState) {
             move |_| art.set_icon_name(Some("audio-x-generic-symbolic"))
         },
     );
-}
-
-fn load_css() {
-    static LOADED: std::sync::Once = std::sync::Once::new();
-    LOADED.call_once(|| {
-        let provider = CssProvider::new();
-        provider.load_from_string(
-            r#"
-            window { background: alpha(@window_bg_color, 0.95); }
-            .card-box {
-                background: alpha(@view_fg_color, 0.04);
-                border: 1px solid alpha(@view_fg_color, 0.08);
-                border-radius: 12px; padding: 16px;
-            }
-            .toggle-card {
-                padding: 14px; border-radius: 14px;
-                background: alpha(@view_fg_color, 0.04);
-                border: 1px solid alpha(@view_fg_color, 0.08);
-            }
-            .toggle-title { font-weight: bold; }
-            .toggle-subtitle { font-size: 0.85em; opacity: 0.65; }
-            .media-card {
-                background: alpha(@window_bg_color, 0.5);
-                border: 1px solid alpha(@view_fg_color, 0.1);
-                border-radius: 14px; padding: 12px;
-            }
-            .bold-label { font-weight: bold; }
-            .dim-label { opacity: 0.6; }
-            .power-action-btn { min-height: 42px; }
-            "#,
-        );
-        if let Some(display) = gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
-    });
 }

@@ -19,6 +19,7 @@ impl PlaceholderWindow {
             .default_height(220)
             .resizable(false)
             .build();
+        crate::theme::style_window(&window);
 
         let box_ = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
         box_.set_halign(gtk4::Align::Center);

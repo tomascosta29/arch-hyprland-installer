@@ -46,8 +46,14 @@ if (($# > 1)); then
     die "Usage: monitor-select [single|dual]"
 fi
 
-MODE="${1:-}"
-[[ -n "${MODE}" ]] || MODE="$(choose_mode)"
+if (($# == 0)); then
+    if command -v costa-utils >/dev/null 2>&1; then
+        exec costa-utils --monitor-menu
+    fi
+    MODE="$(choose_mode)"
+else
+    MODE="${1:-}"
+fi
 
 case "${MODE}" in
     single)

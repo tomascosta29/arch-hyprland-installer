@@ -4,7 +4,7 @@ use crate::task::spawn_result;
 use adw::prelude::*;
 use costa_core::backends::blinker::{BlinkerBackend, CaptureMode};
 use costa_core::command;
-use gtk4::{gdk, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk4::{gdk, glib};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -21,33 +21,38 @@ impl BlinkerWindow {
         let window = adw::ApplicationWindow::builder()
             .application(app)
             .title("Blinker")
-            .default_width(420)
-            .default_height(260)
+            .default_width(480)
+            .default_height(340)
             .resizable(false)
             .build();
+        crate::theme::style_window(&window);
 
         let toast = adw::ToastOverlay::new();
         window.set_content(Some(&toast));
-        let view = adw::ToolbarView::new();
-        toast.set_child(Some(&view));
-        let header = adw::HeaderBar::new();
+
+        let main_box = gtk4::Box::new(gtk4::Orientation::Vertical, 20);
+        main_box.set_halign(gtk4::Align::Fill);
+        main_box.set_margin_top(24);
+        main_box.set_margin_bottom(24);
+        main_box.set_margin_start(24);
+        main_box.set_margin_end(24);
+        toast.set_child(Some(&main_box));
+
         let title = gtk4::Label::new(None);
-        title.set_markup("<b>Blinker</b>");
-        header.set_title_widget(Some(&title));
-        let settings = gtk4::Button::from_icon_name("settings-symbolic");
-        header.pack_end(&settings);
-        view.add_top_bar(&header);
+        title.set_markup("<span size='large' weight='bold'>Screenshot</span>");
+        title.set_halign(gtk4::Align::Center);
+        main_box.append(&title);
 
-        let main = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
-        main.set_margin_start(12);
-        main.set_margin_end(12);
-        main.set_margin_top(8);
-        main.set_margin_bottom(12);
-        view.set_content(Some(&main));
-
-        let list = gtk4::ListBox::new();
-        list.add_css_class("boxed-list");
-        main.append(&list);
+        let flow = gtk4::FlowBox::new();
+        flow.set_halign(gtk4::Align::Center);
+        flow.set_valign(gtk4::Align::Center);
+        flow.set_selection_mode(gtk4::SelectionMode::None);
+        flow.set_max_children_per_line(3);
+        flow.set_min_children_per_line(3);
+        flow.set_column_spacing(16);
+        flow.set_row_spacing(16);
+        flow.set_vexpand(true);
+        main_box.append(&flow);
 
         let focus_guard = Rc::new(RefCell::new(FocusLossGuard::new()));
         let backend = BlinkerBackend::new();
@@ -56,43 +61,98 @@ impl BlinkerWindow {
         let this_window = window.clone();
 
         let options = [
-            (CaptureMode::Full, "Full Screen", "F1", "Capture entire screen"),
-            (CaptureMode::Area, "Select Area", "F2", "Draw to select region"),
+            (
+                CaptureMode::Full,
+                "Full Screen",
+                "F1",
+                "view-fullscreen-symbolic",
+                gdk::Key::F1,
+            ),
+            (
+                CaptureMode::Area,
+                "Select Area",
+                "F2",
+                "find-location-symbolic",
+                gdk::Key::F2,
+            ),
             (
                 CaptureMode::Window,
                 "Active Window",
                 "F3",
-                "Capture focused window",
+                "focus-windows-symbolic",
+                gdk::Key::F3,
             ),
         ];
-        for (mode, label, shortcut, subtitle) in options {
-            let row = adw::ActionRow::builder()
-                .title(label)
-                .subtitle(subtitle)
-                .build();
-            let badge = gtk4::Label::new(Some(shortcut));
-            badge.add_css_class("shortcut-badge");
-            row.add_prefix(&badge);
-            let btn = gtk4::Button::from_icon_name("camera-photo-symbolic");
-            btn.add_css_class("flat");
-            let window = this_window.clone();
-            let toast = this_toast.clone();
-            let backend = backend.clone();
-            let capturing = capturing.clone();
-            btn.connect_clicked(move |_| {
-                capture(&window, &toast, &backend, &capturing, mode);
+
+        for (mode, label, shortcut, icon_name, key) in options {
+            let button = make_capture_tile(label, shortcut, icon_name);
+            let window_click = this_window.clone();
+            let toast_click = this_toast.clone();
+            let backend_click = backend.clone();
+            let capturing_click = capturing.clone();
+            button.connect_clicked(move |_| {
+                capture(
+                    &window_click,
+                    &toast_click,
+                    &backend_click,
+                    &capturing_click,
+                    mode,
+                );
             });
-            row.add_suffix(&btn);
-            list.append(&row);
+            flow.append(&button);
+
+            let window_key = this_window.clone();
+            let toast_key = this_toast.clone();
+            let backend_key = backend.clone();
+            let capturing_key = capturing.clone();
+            let key_ctrl = gtk4::EventControllerKey::new();
+            key_ctrl.connect_key_pressed(move |_, keyval, _, _| {
+                if keyval == key {
+                    capture(
+                        &window_key,
+                        &toast_key,
+                        &backend_key,
+                        &capturing_key,
+                        mode,
+                    );
+                    return glib::Propagation::Stop;
+                }
+                glib::Propagation::Proceed
+            });
+            this_window.add_controller(key_ctrl);
         }
 
+        let footer = gtk4::Box::new(gtk4::Orientation::Horizontal, 16);
+        footer.set_halign(gtk4::Align::Center);
+        let settings = gtk4::Button::new();
+        settings.set_label("Settings");
+        settings.add_css_class("flat");
+        footer.append(&settings);
+        let hint = gtk4::Label::new(Some("Press Esc to close"));
+        hint.add_css_class("dim-label");
+        footer.append(&hint);
+        main_box.append(&footer);
+
+        let this_window_settings = window.clone();
         settings.connect_clicked(move |_| {
             let _ = command::spawn(&["costa-utils", "--blinker-manager"]);
-            this_window.set_visible(false);
+            this_window_settings.set_visible(false);
         });
 
+        let key = gtk4::EventControllerKey::new();
+        {
+            let window = window.clone();
+            key.connect_key_pressed(move |_, keyval, _, _| {
+                if keyval == gdk::Key::Escape {
+                    window.set_visible(false);
+                    return glib::Propagation::Stop;
+                }
+                glib::Propagation::Proceed
+            });
+        }
+        window.add_controller(key);
+
         install_popup_dismiss(&window, focus_guard.clone());
-        load_css();
 
         Self {
             window,
@@ -116,6 +176,30 @@ impl BlinkerWindow {
             CaptureMode::Area,
         );
     }
+}
+
+fn make_capture_tile(label: &str, shortcut: &str, icon_name: &str) -> gtk4::Button {
+    let button = gtk4::Button::new();
+    button.add_css_class("capture-tile");
+
+    let box_ = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+    box_.set_halign(gtk4::Align::Center);
+    box_.set_valign(gtk4::Align::Center);
+
+    let icon = gtk4::Image::from_icon_name(icon_name);
+    icon.set_pixel_size(40);
+    box_.append(&icon);
+
+    let title = gtk4::Label::new(Some(label));
+    title.add_css_class("capture-tile-label");
+    box_.append(&title);
+
+    let key = gtk4::Label::new(Some(shortcut));
+    key.add_css_class("capture-tile-shortcut");
+    box_.append(&key);
+
+    button.set_child(Some(&box_));
+    button
 }
 
 fn capture(
@@ -155,28 +239,4 @@ fn capture(
             toast_err.add_toast(adw::Toast::new(&format!("{err}")));
         },
     );
-}
-
-fn load_css() {
-    static LOADED: std::sync::Once = std::sync::Once::new();
-    LOADED.call_once(|| {
-        let provider = CssProvider::new();
-        provider.load_from_string(
-            r#"
-            window { background: alpha(@window_bg_color, 0.95); }
-            .shortcut-badge {
-                font-size: 0.8em; font-weight: bold;
-                background: alpha(@view_fg_color, 0.1);
-                padding: 2px 6px; border-radius: 6px;
-            }
-            "#,
-        );
-        if let Some(display) = gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
-    });
 }

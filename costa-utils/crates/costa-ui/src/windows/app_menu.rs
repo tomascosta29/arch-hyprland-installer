@@ -7,7 +7,7 @@ use costa_core::backends::apps::{
     should_list_app_id,
 };
 use costa_core::command;
-use gtk4::{gdk, glib, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk4::{gdk, glib};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -51,6 +51,7 @@ impl AppMenuWindow {
             .default_height(520)
             .resizable(false)
             .build();
+        crate::theme::style_window(&window);
 
         let main = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
         main.set_margin_top(24);
@@ -60,6 +61,7 @@ impl AppMenuWindow {
         window.set_content(Some(&main));
 
         let search = gtk4::SearchEntry::new();
+        search.add_css_class("costa-search");
         search.set_placeholder_text(Some(if runner_mode {
             "Run command..."
         } else {
@@ -298,7 +300,6 @@ impl AppMenuWindow {
 
         let focus_guard = Rc::new(RefCell::new(FocusLossGuard::new()));
         install_popup_dismiss(&window, focus_guard.clone());
-        load_css();
         refresh_filter(&inner);
 
         Self {
@@ -316,10 +317,13 @@ impl AppMenuWindow {
     }
 }
 
-fn hide_window(inner: &Inner) {
+fn hide_window(inner: &Rc<Inner>) {
     inner.window.set_visible(false);
-    inner.search.set_text("");
-    hide_live(inner);
+    let inner = inner.clone();
+    glib::idle_add_local_once(move || {
+        inner.search.set_text("");
+        hide_live(&inner);
+    });
 }
 
 fn hide_live(inner: &Inner) {
@@ -336,7 +340,7 @@ fn show_live(inner: &Inner, title: &str, value: &str, icon: &str, action: Option
     inner.live_box.set_visible(true);
 }
 
-fn activate_search(inner: &Inner) {
+fn activate_search(inner: &Rc<Inner>) {
     if let Some(action) = inner.live_action.borrow().clone() {
         action();
         return;
@@ -363,7 +367,7 @@ fn activate_search(inner: &Inner) {
     }
 }
 
-fn run_command_line(inner: &Inner, cmd: &str) {
+fn run_command_line(inner: &Rc<Inner>, cmd: &str) {
     remember_runner_command(&mut inner.history.borrow_mut(), cmd);
     let _ = command::spawn(&["sh", "-lc", cmd.trim()]);
     hide_window(inner);
@@ -612,34 +616,4 @@ fn history_row(cmd: &str) -> gtk4::ListBoxRow {
     box_.append(&label);
     row.set_child(Some(&box_));
     row
-}
-
-fn load_css() {
-    static LOADED: std::sync::Once = std::sync::Once::new();
-    LOADED.call_once(|| {
-        let provider = CssProvider::new();
-        provider.load_from_string(
-            r#"
-            window { background: alpha(@window_bg_color, 0.95); }
-            .app-card { padding: 12px 8px; border-radius: 12px; min-width: 110px; }
-            .app-card:hover { background: alpha(@accent_bg_color, 0.12); }
-            .app-label { font-size: 0.85em; }
-            .live-result {
-                background: alpha(@accent_bg_color, 0.12);
-                border: 1px solid alpha(@accent_bg_color, 0.25);
-                border-radius: 12px; padding: 12px 16px;
-            }
-            .live-result-value { font-size: 1.2em; font-weight: bold; }
-            .history-list { background: alpha(@view_fg_color, 0.02); border-radius: 12px; }
-            .dim-label { opacity: 0.6; }
-            "#,
-        );
-        if let Some(display) = gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
-    });
 }

@@ -132,7 +132,7 @@ hl.bind(
     { release = true }
 )
 hl.bind(main_mod .. " + ALT + T", hl.dsp.exec_cmd(scripts .. "/theme-select"))
-hl.bind(main_mod .. " + ALT + M", hl.dsp.exec_cmd(scripts .. "/monitor-select"))
+hl.bind(main_mod .. " + ALT + M", hl.dsp.exec_cmd(costa_utils .. " --monitor-menu"))
 hl.bind(main_mod .. " + ALT + K", hl.dsp.exec_cmd(scripts .. "/desktop-settings"))
 hl.bind(main_mod .. " + Print", hl.dsp.exec_cmd(costa_utils .. " --blinker-area"))
 hl.bind(main_mod .. " + L", hl.dsp.exec_cmd("loginctl lock-session"))

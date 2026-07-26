@@ -1,4 +1,4 @@
-//! Shared modal popup lifecycle with explicit backdrop-click dismissal.
+//! Shared floating popup lifecycle.
 
 use crate::focus_guard::FocusLossGuard;
 use adw::prelude::*;
@@ -20,7 +20,7 @@ pub fn install_popup_dismiss(
         window,
         #[upgrade_or]
         return glib::Propagation::Proceed,
-            move |_, keyval, _, _| {
+        move |_, keyval, _, _| {
             if keyval == gdk::Key::Escape {
                 info!(title = ?window.title(), reason = "escape", "popup dismissed");
                 window.set_visible(false);
@@ -41,82 +41,15 @@ pub fn install_popup_dismiss(
 
 pub fn present_popup(window: &adw::ApplicationWindow, _focus_guard: &RefCell<FocusLossGuard>) {
     info!(title = ?window.title(), "popup presented");
-    install_modal_backdrop(window);
+    crate::theme::install();
     sync_popup_size(window);
     install_size_logger(window);
-    if let Some(backdrop) =
-        unsafe { window.data::<adw::ApplicationWindow>("costa-modal-backdrop") }
-    {
-        unsafe { backdrop.as_ref() }.maximize();
-        unsafe { backdrop.as_ref() }.present();
+    // Compact floating card only — Hyprland float+center rules place it.
+    // No fullscreen dimmer; Escape / close dismiss.
+    if window.is_fullscreen() {
+        window.unfullscreen();
     }
     window.present();
-}
-
-/// Create a separate workspace-sized surface behind the compact popup. Keeping
-/// the popup in its own toplevel preserves its original GTK allocation and CSS.
-fn install_modal_backdrop(window: &adw::ApplicationWindow) {
-    if unsafe {
-        window
-            .data::<adw::ApplicationWindow>("costa-modal-backdrop")
-            .is_some()
-    } {
-        return;
-    }
-
-    let Some(application) = window.application() else {
-        return;
-    };
-
-    let backdrop = adw::ApplicationWindow::builder()
-        .application(&application)
-        .title("Costa Modal Backdrop")
-        .decorated(false)
-        .resizable(true)
-        .build();
-    backdrop.add_css_class("costa-modal-backdrop-window");
-
-    let click_target = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    click_target.set_hexpand(true);
-    click_target.set_vexpand(true);
-    backdrop.set_content(Some(&click_target));
-
-    let click = gtk4::GestureClick::new();
-    click.connect_released(clone!(
-        #[weak]
-        window,
-        move |_, _, _, _| {
-            info!(title = ?window.title(), reason = "backdrop-click", "popup dismissed");
-            window.set_visible(false);
-        }
-    ));
-    click_target.add_controller(click);
-
-    backdrop.connect_close_request(clone!(
-        #[weak]
-        window,
-        #[upgrade_or]
-        glib::Propagation::Proceed,
-        move |backdrop| {
-            window.set_visible(false);
-            backdrop.set_visible(false);
-            glib::Propagation::Stop
-        }
-    ));
-    window.connect_visible_notify(clone!(
-        #[weak]
-        backdrop,
-        move |popup| {
-            if !popup.is_visible() {
-                backdrop.set_visible(false);
-            }
-        }
-    ));
-    window.set_transient_for(Some(&backdrop));
-    install_modal_css();
-    unsafe {
-        window.set_data("costa-modal-backdrop", backdrop);
-    }
 }
 
 /// Measure and pin the compact popup before its first mapped frame.
@@ -128,30 +61,13 @@ fn sync_popup_size(window: &adw::ApplicationWindow) {
     let (_min, natural) = window.preferred_size();
     let (default_w, default_h) = window.default_size();
     let width = natural.width().max(default_w).max(1);
-    let height = natural.height().max(default_h).max(1);
+    // Prefer content height when default height is unset/placeholder.
+    let height = if default_h > 0 {
+        natural.height().max(default_h).max(1)
+    } else {
+        natural.height().max(1)
+    };
     window.set_default_size(width, height);
-    window.set_size_request(width, height);
-}
-
-fn install_modal_css() {
-    static LOADED: std::sync::Once = std::sync::Once::new();
-    LOADED.call_once(|| {
-        let provider = gtk4::CssProvider::new();
-        provider.load_from_string(
-            r#"
-            window.costa-modal-backdrop-window {
-                background: alpha(black, 0.16);
-            }
-            "#,
-        );
-        if let Some(display) = gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                gtk4::STYLE_PROVIDER_PRIORITY_USER,
-            );
-        }
-    });
 }
 
 fn debug_size_enabled() -> bool {
@@ -216,8 +132,6 @@ fn install_size_logger(window: &adw::ApplicationWindow) {
         move |win| log_size(win)
     ));
 
-    // Sample a few frames after present — catches allocate settles that do not
-    // bump default-width/height.
     let win = window.clone();
     let log_size = Rc::new(log_size);
     glib::timeout_add_local(std::time::Duration::from_millis(0), {

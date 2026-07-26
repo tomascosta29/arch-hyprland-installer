@@ -551,7 +551,7 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_svg_icons_are_well_formed(self):
         icons_dir = REPOSITORY_ROOT / "costa-utils" / "assets" / "icons"
-        for icon in icons_dir.glob("*.svg"):
+        for icon in icons_dir.rglob("*.svg"):
             ET.parse(icon)
 
     def test_user_deployer_covers_every_config_component(self):

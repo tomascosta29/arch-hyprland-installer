@@ -4,7 +4,7 @@ use crate::task::{spawn_result, Debouncer};
 use adw::prelude::*;
 use costa_core::backends::audio::{AudioBackend, AudioDevice, AudioSnapshot};
 use costa_core::backends::media::{MediaBackend, MediaState};
-use gtk4::{gdk, glib, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk4::glib;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -52,6 +52,7 @@ impl VolumeWindow {
             .default_height(520)
             .resizable(false)
             .build();
+        crate::theme::style_window(&window);
 
         let toast_overlay = adw::ToastOverlay::new();
         window.set_content(Some(&toast_overlay));
@@ -59,10 +60,7 @@ impl VolumeWindow {
         let view = adw::ToolbarView::new();
         toast_overlay.set_child(Some(&view));
 
-        let header = adw::HeaderBar::new();
-        let title = gtk4::Label::new(None);
-        title.set_markup("<b>Audio &amp; Media</b>");
-        header.set_title_widget(Some(&title));
+        let header = crate::theme::header("Audio & Media", "Volume and devices");
         view.add_top_bar(&header);
 
         let main_box = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
@@ -81,6 +79,7 @@ impl VolumeWindow {
         let out_mute_btn = gtk4::Button::from_icon_name("audio-volume-high-symbolic");
         out_mute_btn.add_css_class("flat");
         let out_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 150.0, 1.0);
+        out_slider.add_css_class("cc-scale");
         out_slider.set_draw_value(false);
         out_slider.set_hexpand(true);
         let out_slider_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
@@ -93,6 +92,7 @@ impl VolumeWindow {
         let in_mute_btn = gtk4::Button::from_icon_name("audio-input-microphone-symbolic");
         in_mute_btn.add_css_class("flat");
         let in_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 150.0, 1.0);
+        in_slider.add_css_class("cc-scale");
         in_slider.set_draw_value(false);
         in_slider.set_hexpand(true);
         let in_slider_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
@@ -307,8 +307,6 @@ impl VolumeWindow {
                 }
             });
         }
-
-        load_css();
 
         Self {
             window,
@@ -553,46 +551,4 @@ fn apply_media(state: &VolumeState, media: MediaState) {
             move |_| art.set_icon_name(Some("audio-x-generic-symbolic"))
         },
     );
-}
-
-fn load_css() {
-    static LOADED: std::sync::Once = std::sync::Once::new();
-    LOADED.call_once(|| {
-        let provider = CssProvider::new();
-        provider.load_from_string(
-            r#"
-            window { background: alpha(@window_bg_color, 0.95); }
-            .card-box {
-                background: alpha(@view_fg_color, 0.04);
-                border: 1px solid alpha(@view_fg_color, 0.08);
-                border-radius: 12px;
-                padding: 16px;
-            }
-            .bold-label { font-weight: bold; color: @view_fg_color; }
-            .dim-label { font-size: 0.85em; opacity: 0.6; }
-            .device-list-sub {
-                background: alpha(@view_fg_color, 0.02);
-                border: 1px solid alpha(@view_fg_color, 0.08);
-                border-radius: 12px;
-                padding: 4px;
-            }
-            .device-row { padding: 10px 14px; border-radius: 8px; }
-            .device-list-sub row:hover { background: alpha(@accent_bg_color, 0.1); }
-            .accent-icon { color: @accent_color; }
-            .media-card {
-                background: alpha(@window_bg_color, 0.5);
-                border: 1px solid alpha(@view_fg_color, 0.1);
-                border-radius: 14px;
-                padding: 12px;
-            }
-            "#,
-        );
-        if let Some(display) = gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
-    });
 }

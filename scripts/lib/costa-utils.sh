@@ -75,6 +75,7 @@ install_costa_utils() {
         "${bin_dir}" \
         "${data_dir}/applications" \
         "${data_dir}/icons/hicolor/scalable/apps" \
+        "${data_dir}/icons/hicolor/scalable/actions" \
         "${data_dir}/costa-utils/icons"
 
     install -Dm755 "${bin}" "${bin_dir}/costa-utils"
@@ -82,7 +83,13 @@ install_costa_utils() {
         "${data_dir}/applications/org.fcosta.CostaUtils.desktop"
     install -Dm644 "${icon_src}" \
         "${data_dir}/icons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg"
+    if [[ -d "${src}/assets/icons/hicolor" ]]; then
+        cp -a "${src}/assets/icons/hicolor/." "${data_dir}/icons/hicolor/"
+    fi
     cp -a "${src}/assets/icons/." "${data_dir}/costa-utils/icons/"
+
+    command -v gtk-update-icon-cache >/dev/null 2>&1 &&
+        gtk-update-icon-cache -f -t "${data_dir}/icons/hicolor" >/dev/null 2>&1 || true
 
     if [[ -n "${manifest_file}" ]]; then
         {
@@ -90,7 +97,12 @@ install_costa_utils() {
             printf 'DATA\ticons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg\n'
             printf 'BIN\tcosta-utils\n'
             while IFS= read -r -d '' icon; do
-                printf 'DATA\tcosta-utils/icons/%s\n' "${icon#"${src}/assets/icons/"}"
+                rel="${icon#"${src}/assets/icons/"}"
+                if [[ "${rel}" == hicolor/* ]]; then
+                    printf 'DATA\ticons/%s\n' "${rel}"
+                else
+                    printf 'DATA\tcosta-utils/icons/%s\n' "${rel}"
+                fi
             done < <(find "${src}/assets/icons" -type f -print0 | sort -z)
         } >> "${manifest_file}"
     fi

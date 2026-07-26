@@ -1,12 +1,14 @@
 use crate::windows::{
     AppMenuWindow, BlinkerManagerWindow, BlinkerWindow, BluetoothWindow, ClipperWindow,
-    ControlCenterWindow, NetworkWindow, PowerWindow, VolumeWindow,
+    ControlCenterWindow, MonitorWindow, NetworkWindow, PowerWindow, VolumeWindow,
 };
 use crate::ACTIVATE_TARGET_ACTION;
 use adw::prelude::*;
 use costa_core::Target;
 use glib::clone;
+use gtk4::gdk;
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use tracing::{info, warn};
 
@@ -23,6 +25,7 @@ struct Windows {
     clipper: Option<ClipperWindow>,
     blinker: Option<BlinkerWindow>,
     blinker_manager: Option<BlinkerManagerWindow>,
+    monitor: Option<MonitorWindow>,
     control_center: Option<ControlCenterWindow>,
 }
 
@@ -42,6 +45,9 @@ pub fn run(initial: Target) -> i32 {
         warn!(%err, "failed to register application");
         return 1;
     }
+
+    crate::theme::install();
+    ensure_bundled_icons();
 
     if app.is_remote() {
         info!(target = initial.flag(), "forwarding to primary instance");
@@ -180,6 +186,12 @@ fn activate_target(app: &adw::Application, state: &AppState, target: Target) {
             }
             windows.blinker_manager.as_ref().unwrap().present();
         }
+        Target::MonitorMenu => {
+            if windows.monitor.is_none() {
+                windows.monitor = Some(MonitorWindow::new(app));
+            }
+            windows.monitor.as_ref().unwrap().present();
+        }
         Target::ControlCenter => {
             if windows.control_center.is_none() {
                 windows.control_center = Some(ControlCenterWindow::new(app));
@@ -197,4 +209,30 @@ fn configure_renderer() {
     {
         std::env::set_var("GSK_RENDERER", "gl");
     }
+}
+
+/// Register bundled icon themes (e.g. suspend) missing from Adwaita.
+fn ensure_bundled_icons() {
+    static LOADED: std::sync::Once = std::sync::Once::new();
+    LOADED.call_once(|| {
+        let Some(display) = gdk::Display::default() else {
+            return;
+        };
+        let theme = gtk4::IconTheme::for_display(&display);
+        for path in bundled_icon_search_paths() {
+            if path.is_dir() {
+                theme.add_search_path(&path);
+            }
+        }
+    });
+}
+
+fn bundled_icon_search_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if let Some(home) = std::env::var_os("HOME") {
+        let data = PathBuf::from(home).join(".local/share");
+        paths.push(data.join("costa-utils/icons"));
+        paths.push(data.join("icons"));
+    }
+    paths
 }

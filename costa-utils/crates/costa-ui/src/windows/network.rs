@@ -4,7 +4,7 @@ use crate::task::spawn_result;
 use adw::prelude::*;
 use costa_core::backends::network::{NetworkBackend, WifiNetwork, WifiProfile, WifiState};
 use costa_core::command;
-use gtk4::{gdk, glib, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk4::glib;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -43,6 +43,7 @@ impl NetworkWindow {
             .default_height(450)
             .resizable(false)
             .build();
+        crate::theme::style_window(&window);
 
         let toast_overlay = adw::ToastOverlay::new();
         window.set_content(Some(&toast_overlay));
@@ -50,10 +51,7 @@ impl NetworkWindow {
         let view = adw::ToolbarView::new();
         toast_overlay.set_child(Some(&view));
 
-        let header = adw::HeaderBar::new();
-        let title = gtk4::Label::new(None);
-        title.set_markup("<b>Network</b>");
-        header.set_title_widget(Some(&title));
+        let header = crate::theme::header("Network", "Wi-Fi connections");
         let refresh_btn = gtk4::Button::from_icon_name("view-refresh-symbolic");
         refresh_btn.set_tooltip_text(Some("Refresh Wi-Fi list"));
         header.pack_end(&refresh_btn);
@@ -238,8 +236,6 @@ impl NetworkWindow {
 
         let focus_guard = Rc::new(RefCell::new(FocusLossGuard::new()));
         install_popup_dismiss(&window, focus_guard.clone());
-
-        load_css();
 
         Self {
             window,
@@ -444,47 +440,4 @@ fn start_connection(
             }
         },
     );
-}
-
-fn load_css() {
-    static LOADED: std::sync::Once = std::sync::Once::new();
-    LOADED.call_once(|| {
-        let provider = CssProvider::new();
-        provider.load_from_string(
-            r#"
-            window { background: alpha(@window_bg_color, 0.95); }
-            .card-box {
-                background: alpha(@view_fg_color, 0.04);
-                border: 1px solid alpha(@view_fg_color, 0.08);
-                border-radius: 12px;
-                padding: 12px 16px;
-            }
-            .network-list {
-                background: alpha(@view_fg_color, 0.02);
-                border: 1px solid alpha(@view_fg_color, 0.08);
-                border-radius: 12px;
-                padding: 4px;
-            }
-            .network-row { padding: 12px 16px; border-radius: 8px; }
-            .network-list row:hover { background: alpha(@accent_bg_color, 0.1); }
-            .accent-icon { color: @accent_color; }
-            .bold-label { font-weight: bold; color: @accent_color; }
-            .password-card {
-                background: alpha(@window_bg_color, 0.5);
-                border: 1px solid alpha(@view_fg_color, 0.1);
-                border-radius: 16px;
-                padding: 32px;
-                min-width: 320px;
-            }
-            .password-title { font-size: 1.1em; margin-bottom: 8px; }
-            "#,
-        );
-        if let Some(display) = gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
-    });
 }

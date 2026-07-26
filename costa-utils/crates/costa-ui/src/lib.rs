@@ -6,6 +6,7 @@ mod bluetooth_agent;
 mod focus_guard;
 mod popup;
 mod task;
+mod theme;
 mod windows;
 
 pub use app::{run, APPLICATION_ID};

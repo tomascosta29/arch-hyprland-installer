@@ -2,38 +2,53 @@
 
 use crate::command;
 use crate::Result;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Default)]
+const NIGHT_TEMP: i32 = 4500;
+const DAY_TEMP: i32 = 6500;
+const ENABLED_BELOW: f64 = 6000.0;
+
+#[derive(Debug, Clone)]
 pub struct NightLightBackend {
     temperature: i32,
-    enabled: Mutex<Option<bool>>,
+    /// Shared across clones so toggle + refresh see the same override.
+    enabled: Arc<Mutex<Option<bool>>>,
 }
 
-impl Clone for NightLightBackend {
-    fn clone(&self) -> Self {
-        Self {
-            temperature: self.temperature,
-            enabled: Mutex::new(*self.enabled.lock().unwrap_or_else(|e| e.into_inner())),
-        }
+impl Default for NightLightBackend {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl NightLightBackend {
     pub fn new() -> Self {
         Self {
-            temperature: 4500,
-            enabled: Mutex::new(None),
+            temperature: NIGHT_TEMP,
+            enabled: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn set_enabled(&self, enabled: bool) -> Result<bool> {
-        let profile = if enabled {
-            format!("temperature {}", self.temperature)
+        // `identity` resets the CTM but leaves `temperature` reporting the last
+        // kelvin value, so query() would still think night light is on. Set an
+        // explicit day temperature when disabling.
+        if enabled {
+            command::run(
+                &[
+                    "hyprctl",
+                    "hyprsunset",
+                    "temperature",
+                    &self.temperature.to_string(),
+                ],
+                true,
+            )?;
         } else {
-            "identity".into()
-        };
-        command::run(&["hyprctl", "hyprsunset", &profile], true)?;
+            command::run(
+                &["hyprctl", "hyprsunset", "temperature", &DAY_TEMP.to_string()],
+                true,
+            )?;
+        }
         *self.enabled.lock().unwrap_or_else(|e| e.into_inner()) = Some(enabled);
         Ok(enabled)
     }
@@ -49,8 +64,8 @@ impl NightLightBackend {
             return Ok(enabled);
         }
         let result = command::run(&["hyprctl", "hyprsunset", "temperature"], false)?;
-        let temperature = result.stdout.trim().parse::<f64>().unwrap_or(6500.0);
-        let enabled = result.ok() && temperature < 6000.0;
+        let temperature = result.stdout.trim().parse::<f64>().unwrap_or(DAY_TEMP as f64);
+        let enabled = result.ok() && temperature < ENABLED_BELOW;
         *guard = Some(enabled);
         Ok(enabled)
     }

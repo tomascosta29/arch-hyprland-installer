@@ -4,7 +4,7 @@ use crate::popup::{install_popup_dismiss, present_popup};
 use crate::task::spawn_result;
 use adw::prelude::*;
 use costa_core::backends::bluetooth::{BluetoothBackend, BluetoothState, BtDevice};
-use gtk4::{gdk, glib, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk4::glib;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -36,15 +36,13 @@ impl BluetoothWindow {
             .default_height(450)
             .resizable(false)
             .build();
+        crate::theme::style_window(&window);
 
         let toast = adw::ToastOverlay::new();
         window.set_content(Some(&toast));
         let view = adw::ToolbarView::new();
         toast.set_child(Some(&view));
-        let header = adw::HeaderBar::new();
-        let title = gtk4::Label::new(None);
-        title.set_markup("<b>Bluetooth</b>");
-        header.set_title_widget(Some(&title));
+        let header = crate::theme::header("Bluetooth", "Devices and connections");
         let refresh = gtk4::Button::from_icon_name("view-refresh-symbolic");
         header.pack_end(&refresh);
         view.add_top_bar(&header);
@@ -183,7 +181,6 @@ impl BluetoothWindow {
 
         let focus_guard = Rc::new(RefCell::new(FocusLossGuard::new()));
         install_popup_dismiss(&window, focus_guard.clone());
-        load_css();
 
         Self {
             window,
@@ -228,11 +225,16 @@ fn apply_state(inner: &Inner, state: BluetoothState) {
     for device in &state.devices {
         let row = gtk4::ListBoxRow::new();
         let box_ = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        box_.add_css_class("network-row");
         box_.set_margin_start(12);
         box_.set_margin_end(12);
         box_.set_margin_top(10);
         box_.set_margin_bottom(10);
-        box_.append(&gtk4::Image::from_icon_name("bluetooth-active-symbolic"));
+        let icon = gtk4::Image::from_icon_name("bluetooth-active-symbolic");
+        if device.connected {
+            icon.add_css_class("accent-icon");
+        }
+        box_.append(&icon);
         let labels = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
         let name = gtk4::Label::new(Some(&device.name));
         name.set_halign(gtk4::Align::Start);
@@ -252,39 +254,13 @@ fn apply_state(inner: &Inner, state: BluetoothState) {
         labels.append(&name);
         labels.append(&status);
         box_.append(&labels);
+        if device.connected {
+            let check = gtk4::Image::from_icon_name("object-select-symbolic");
+            check.add_css_class("accent-icon");
+            box_.append(&check);
+        }
         row.set_child(Some(&box_));
         inner.list.append(&row);
     }
     inner.stack.set_visible_child_name("list");
-}
-
-fn load_css() {
-    static LOADED: std::sync::Once = std::sync::Once::new();
-    LOADED.call_once(|| {
-        let provider = CssProvider::new();
-        provider.load_from_string(
-            r#"
-            window { background: alpha(@window_bg_color, 0.95); }
-            .card-box {
-                background: alpha(@view_fg_color, 0.04);
-                border: 1px solid alpha(@view_fg_color, 0.08);
-                border-radius: 12px; padding: 12px 16px;
-            }
-            .network-list {
-                background: alpha(@view_fg_color, 0.02);
-                border: 1px solid alpha(@view_fg_color, 0.08);
-                border-radius: 12px;
-            }
-            .bold-label { font-weight: bold; color: @accent_color; }
-            .dim-label { opacity: 0.6; font-size: 0.85em; }
-            "#,
-        );
-        if let Some(display) = gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
-    });
 }

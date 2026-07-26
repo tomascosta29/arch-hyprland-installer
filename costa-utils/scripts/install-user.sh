@@ -9,6 +9,7 @@ DATA_DIR="${HOME}/.local/share"
 APP_DIR="${DATA_DIR}/costa-utils"
 DESKTOP_DIR="${DATA_DIR}/applications"
 ICON_DIR="${DATA_DIR}/icons/hicolor/scalable/apps"
+ACTION_ICON_DIR="${DATA_DIR}/icons/hicolor/scalable/actions"
 
 source "${HOME}/.cargo/env" 2>/dev/null || true
 
@@ -31,12 +32,15 @@ fi
 
 cargo build --release --manifest-path "${ROOT}/Cargo.toml"
 
-mkdir -p "${BIN_DIR}" "${APP_DIR}" "${DESKTOP_DIR}" "${ICON_DIR}"
+mkdir -p "${BIN_DIR}" "${APP_DIR}" "${DESKTOP_DIR}" "${ICON_DIR}" "${ACTION_ICON_DIR}"
 install -Dm755 "${ROOT}/target/release/costa-utils" "${BIN_DIR}/costa-utils"
 install -Dm644 "${ROOT}/assets/applications/org.fcosta.CostaUtils.desktop" \
     "${DESKTOP_DIR}/org.fcosta.CostaUtils.desktop"
 install -Dm644 "${ROOT}/assets/icons/costa_utils.svg" \
     "${ICON_DIR}/org.fcosta.CostaUtils.svg"
+if [[ -d "${ROOT}/assets/icons/hicolor" ]]; then
+    cp -a "${ROOT}/assets/icons/hicolor/." "${DATA_DIR}/icons/hicolor/"
+fi
 # Keep icons used by blinker UI next to the install tree for reference.
 cp -a "${ROOT}/assets/icons/." "${APP_DIR}/icons/" 2>/dev/null || true
 

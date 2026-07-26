@@ -2,7 +2,7 @@ use crate::focus_guard::FocusLossGuard;
 use crate::popup::{install_popup_dismiss, present_popup};
 use adw::prelude::*;
 use costa_core::backends::{PowerAction, PowerBackend};
-use gtk4::{gdk, glib, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk4::glib;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use tracing::error;
@@ -21,6 +21,7 @@ impl PowerWindow {
             .default_height(420)
             .resizable(false)
             .build();
+        crate::theme::style_window(&window);
 
         let backend = PowerBackend::new();
         let pending = Rc::new(Cell::new(None::<PowerAction>));
@@ -103,7 +104,6 @@ impl PowerWindow {
         }
 
         install_popup_dismiss(&window, focus_guard.clone());
-        load_css();
 
         Self {
             window,
@@ -149,45 +149,4 @@ fn reset_confirmation(
         label.set_label(action.label());
         button.remove_css_class("destructive-action");
     }
-}
-
-fn load_css() {
-    static LOADED: std::sync::Once = std::sync::Once::new();
-    LOADED.call_once(|| {
-        let provider = CssProvider::new();
-        provider.load_from_string(
-            r#"
-            window { background: alpha(@window_bg_color, 0.95); }
-            .title-label { font-size: 1.8em; font-weight: 800; margin-bottom: 12px; opacity: 0.8; }
-            .power-btn {
-                padding: 16px;
-                border-radius: 16px;
-                min-width: 120px;
-                min-height: 120px;
-                background: alpha(@view_fg_color, 0.05);
-                border: 1px solid alpha(@view_fg_color, 0.08);
-                transition: all 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
-            }
-            .power-btn:hover {
-                background: alpha(@accent_bg_color, 0.15);
-                border-color: @accent_bg_color;
-                transform: scale(1.05);
-            }
-            .power-btn:active {
-                background: @accent_bg_color;
-                color: @accent_fg_color;
-                transform: scale(0.95);
-            }
-            .btn-label { font-size: 1.1em; font-weight: bold; }
-            .dim-label { opacity: 0.5; font-size: 0.9em; margin-top: 12px; }
-            "#,
-        );
-        if let Some(display) = gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
-    });
 }

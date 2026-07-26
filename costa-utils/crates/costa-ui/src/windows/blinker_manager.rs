@@ -8,12 +8,16 @@ use gdk_pixbuf::Pixbuf;
 use gtk4::gdk;
 use gtk4::prelude::IsA;
 use std::cell::RefCell;
+use std::fs;
+use std::path::Path;
 use std::rc::Rc;
+use std::time::SystemTime;
 
 pub struct BlinkerManagerWindow {
     window: adw::ApplicationWindow,
     focus_guard: Rc<RefCell<FocusLossGuard>>,
-    list: gtk4::ListBox,
+    flow: gtk4::FlowBox,
+    stack: gtk4::Stack,
     backend: BlinkerBackend,
     toast: adw::ToastOverlay,
 }
@@ -23,30 +27,50 @@ impl BlinkerManagerWindow {
         let window = adw::ApplicationWindow::builder()
             .application(app)
             .title("Blinker Manager")
-            .default_width(720)
-            .default_height(520)
+            .default_width(820)
+            .default_height(560)
             .build();
+        crate::theme::style_window(&window);
 
         let toast = adw::ToastOverlay::new();
         window.set_content(Some(&toast));
         let view = adw::ToolbarView::new();
         toast.set_child(Some(&view));
-        let header = adw::HeaderBar::new();
-        let title = gtk4::Label::new(None);
-        title.set_markup("<b>Screenshots</b>");
-        header.set_title_widget(Some(&title));
+        let header = crate::theme::header("Screenshots", "Capture history");
         let settings = gtk4::Button::from_icon_name("emblem-system-symbolic");
         settings.set_tooltip_text(Some("Settings"));
         let open_dir = gtk4::Button::from_icon_name("folder-open-symbolic");
+        open_dir.set_tooltip_text(Some("Open screenshot folder"));
         header.pack_end(&open_dir);
         header.pack_end(&settings);
         view.add_top_bar(&header);
 
-        let list = gtk4::ListBox::new();
-        list.add_css_class("boxed-list");
+        let stack = gtk4::Stack::new();
+        stack.set_vexpand(true);
+        view.set_content(Some(&stack));
+
+        let flow = gtk4::FlowBox::new();
+        flow.set_selection_mode(gtk4::SelectionMode::None);
+        flow.set_homogeneous(false);
+        flow.set_max_children_per_line(3);
+        flow.set_min_children_per_line(1);
+        flow.set_column_spacing(16);
+        flow.set_row_spacing(16);
+        flow.set_margin_start(20);
+        flow.set_margin_end(20);
+        flow.set_margin_top(20);
+        flow.set_margin_bottom(20);
         let scrolled = gtk4::ScrolledWindow::new();
-        scrolled.set_child(Some(&list));
-        view.set_content(Some(&scrolled));
+        scrolled.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Automatic);
+        scrolled.set_child(Some(&flow));
+        stack.add_named(&scrolled, Some("gallery"));
+
+        let empty = adw::StatusPage::builder()
+            .title("No screenshots yet")
+            .description("Captured images will appear here")
+            .icon_name("camera-photo-symbolic")
+            .build();
+        stack.add_named(&empty, Some("empty"));
 
         let backend = BlinkerBackend::new();
         {
@@ -65,15 +89,6 @@ impl BlinkerManagerWindow {
                 open_settings(&window, &backend, &toast);
             });
         }
-        {
-            let backend = backend.clone();
-            list.connect_row_activated(move |_, row| {
-                let index = row.index() as usize;
-                if let Some(path) = backend.recent_screenshots(100).get(index) {
-                    let _ = command::spawn(&["xdg-open", path.to_str().unwrap_or(".")]);
-                }
-            });
-        }
 
         let focus_guard = Rc::new(RefCell::new(FocusLossGuard::new()));
         install_popup_dismiss(&window, focus_guard.clone());
@@ -81,7 +96,8 @@ impl BlinkerManagerWindow {
         Self {
             window,
             focus_guard,
-            list,
+            flow,
+            stack,
             backend,
             toast,
         }
@@ -93,34 +109,148 @@ impl BlinkerManagerWindow {
     }
 
     pub fn reload(&self) {
-        while let Some(row) = self.list.row_at_index(0) {
-            self.list.remove(&row);
+        while let Some(child) = self.flow.child_at_index(0) {
+            self.flow.remove(&child);
         }
-        for path in self.backend.recent_screenshots(100) {
-            let name = path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("screenshot");
-            let row = adw::ActionRow::builder().title(name).build();
-            let thumb = gtk4::Image::from_icon_name("image-x-generic-symbolic");
-            thumb.set_pixel_size(48);
-            if let Ok(pixbuf) = Pixbuf::from_file_at_scale(&path, 64, 64, true) {
-                let texture = gdk::Texture::for_pixbuf(&pixbuf);
-                thumb.set_paintable(Some(&texture));
-            }
-            row.add_prefix(&thumb);
-            let copy = gtk4::Button::from_icon_name("edit-copy-symbolic");
-            copy.add_css_class("flat");
-            let backend = self.backend.clone();
-            let path_c = path.clone();
-            let toast = self.toast.clone();
-            copy.connect_clicked(move |_| match backend.copy_image(&path_c) {
-                Ok(()) => toast.add_toast(adw::Toast::new("Copied to clipboard")),
-                Err(err) => toast.add_toast(adw::Toast::new(&format!("Copy failed: {err}"))),
-            });
-            row.add_suffix(&copy);
-            self.list.append(&row);
+        let paths = self.backend.recent_screenshots(100);
+        if paths.is_empty() {
+            self.stack.set_visible_child_name("empty");
+            return;
         }
+        self.stack.set_visible_child_name("gallery");
+        for path in paths {
+            let child = gtk4::FlowBoxChild::new();
+            child.set_child(Some(&make_screenshot_card(
+                &path,
+                &self.backend,
+                &self.toast,
+            )));
+            self.flow.append(&child);
+        }
+    }
+}
+
+fn make_screenshot_card(
+    path: &Path,
+    backend: &BlinkerBackend,
+    toast: &adw::ToastOverlay,
+) -> gtk4::Box {
+    const CARD_W: i32 = 240;
+    const THUMB_H: i32 = 150;
+
+    let card = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    card.add_css_class("screenshot-card");
+    card.set_size_request(CARD_W, -1);
+
+    let click = gtk4::GestureClick::new();
+    let path_open = path.to_path_buf();
+    click.connect_pressed(move |_, _, _, _| {
+        let _ = command::spawn(&["xdg-open", path_open.to_str().unwrap_or(".")]);
+    });
+    card.add_controller(click);
+
+    let thumb_frame = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    thumb_frame.add_css_class("screenshot-thumb-frame");
+    thumb_frame.set_size_request(CARD_W, THUMB_H);
+
+    let picture = gtk4::Picture::new();
+    picture.add_css_class("screenshot-thumb");
+    picture.set_content_fit(gtk4::ContentFit::Cover);
+    picture.set_can_shrink(false);
+    picture.set_size_request(CARD_W, THUMB_H);
+    if let Ok(pixbuf) = Pixbuf::from_file_at_scale(path, CARD_W * 2, THUMB_H * 2, true) {
+        let texture = gdk::Texture::for_pixbuf(&pixbuf);
+        picture.set_paintable(Some(&texture));
+    }
+    thumb_frame.append(&picture);
+    card.append(&thumb_frame);
+
+    let footer = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    footer.add_css_class("screenshot-card-footer");
+
+    let info = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    info.set_hexpand(true);
+    info.set_halign(gtk4::Align::Fill);
+
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("screenshot");
+    let title = gtk4::Label::new(Some(name));
+    title.set_halign(gtk4::Align::Start);
+    title.set_xalign(0.0);
+    title.set_ellipsize(gtk4::pango::EllipsizeMode::Middle);
+    title.add_css_class("screenshot-title");
+    info.append(&title);
+
+    let meta = gtk4::Label::new(Some(&screenshot_meta(path)));
+    meta.set_halign(gtk4::Align::Start);
+    meta.set_xalign(0.0);
+    meta.add_css_class("screenshot-meta");
+    info.append(&meta);
+
+    footer.append(&info);
+
+    let copy = gtk4::Button::from_icon_name("edit-copy-symbolic");
+    copy.add_css_class("flat");
+    copy.add_css_class("screenshot-copy-btn");
+    copy.set_valign(gtk4::Align::Center);
+    copy.set_tooltip_text(Some("Copy to clipboard"));
+    let backend_c = backend.clone();
+    let path_c = path.to_path_buf();
+    let toast_c = toast.clone();
+    copy.connect_clicked(move |_| {
+        match backend_c.copy_image(&path_c) {
+            Ok(()) => toast_c.add_toast(adw::Toast::new("Copied to clipboard")),
+            Err(err) => toast_c.add_toast(adw::Toast::new(&format!("Copy failed: {err}"))),
+        }
+    });
+    footer.append(&copy);
+
+    card.append(&footer);
+    card
+}
+
+fn screenshot_meta(path: &Path) -> String {
+    let Ok(meta) = fs::metadata(path) else {
+        return String::new();
+    };
+    let size = format_file_size(meta.len());
+    let age = meta
+        .modified()
+        .ok()
+        .and_then(|modified| SystemTime::now().duration_since(modified).ok())
+        .map(format_age)
+        .unwrap_or_default();
+    if age.is_empty() {
+        size
+    } else {
+        format!("{age} · {size}")
+    }
+}
+
+fn format_file_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.0} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+fn format_age(duration: std::time::Duration) -> String {
+    let secs = duration.as_secs();
+    if secs < 60 {
+        "Just now".to_string()
+    } else if secs < 3600 {
+        format!("{} min ago", secs / 60)
+    } else if secs < 86_400 {
+        format!("{} hr ago", secs / 3600)
+    } else {
+        format!("{} days ago", secs / 86_400)
     }
 }
 

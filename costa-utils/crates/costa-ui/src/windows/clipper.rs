@@ -5,7 +5,7 @@ use crate::task::spawn_result;
 use adw::prelude::*;
 use costa_core::backends::cliphist::{fuzzy_match, looks_like_existing_path, ClipBackend, ClipEntry};
 use costa_core::command;
-use gtk4::{gdk, glib, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk4::{gdk, glib};
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -53,30 +53,14 @@ impl ClipperWindow {
             .default_width(900)
             .default_height(560)
             .build();
+        crate::theme::style_window(&window);
 
         let toast = adw::ToastOverlay::new();
         window.set_content(Some(&toast));
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         toast.set_child(Some(&root));
 
-        let header = adw::HeaderBar::new();
-        let search = gtk4::SearchEntry::new();
-        search.set_placeholder_text(Some("Search clipboard..."));
-        search.set_hexpand(true);
-        header.set_title_widget(Some(&search));
-
-        let filters = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-        filters.add_css_class("linked");
-        let all = gtk4::ToggleButton::with_label("All");
-        all.set_active(true);
-        let text = gtk4::ToggleButton::with_label("Text");
-        text.set_group(Some(&all));
-        let images = gtk4::ToggleButton::with_label("Images");
-        images.set_group(Some(&all));
-        filters.append(&all);
-        filters.append(&text);
-        filters.append(&images);
-        header.pack_start(&filters);
+        let header = crate::theme::header("Clipboard", "Recent items and pins");
 
         let edit_btn = gtk4::ToggleButton::new();
         edit_btn.set_icon_name("document-edit-symbolic");
@@ -89,7 +73,7 @@ impl ClipperWindow {
         open_path_btn.set_visible(false);
         let pin_btn = gtk4::Button::from_icon_name("user-bookmarks-symbolic");
         pin_btn.set_tooltip_text(Some("Pin / unpin (Ctrl+P)"));
-        let wipe = gtk4::Button::from_icon_name("edit-delete-symbolic");
+        let wipe = gtk4::Button::from_icon_name("edit-clear-all-symbolic");
         wipe.set_tooltip_text(Some("Clear history (keeps pins)"));
         header.pack_end(&wipe);
         header.pack_end(&pin_btn);
@@ -98,22 +82,55 @@ impl ClipperWindow {
         header.pack_end(&edit_btn);
         root.append(&header);
 
+        let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        toolbar.add_css_class("clip-toolbar");
+        toolbar.set_margin_start(16);
+        toolbar.set_margin_end(16);
+        toolbar.set_margin_top(8);
+        toolbar.set_margin_bottom(8);
+
+        let filters = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        filters.add_css_class("linked");
+        let all = gtk4::ToggleButton::with_label("All");
+        all.set_active(true);
+        let text = gtk4::ToggleButton::with_label("Text");
+        text.set_group(Some(&all));
+        let images = gtk4::ToggleButton::with_label("Images");
+        images.set_group(Some(&all));
+        filters.append(&all);
+        filters.append(&text);
+        filters.append(&images);
+        toolbar.append(&filters);
+
+        let search = gtk4::SearchEntry::new();
+        search.set_placeholder_text(Some("Search clipboard..."));
+        search.set_hexpand(true);
+        search.add_css_class("clip-search");
+        search.add_css_class("costa-search");
+        toolbar.append(&search);
+        root.append(&toolbar);
+
         let split = adw::NavigationSplitView::new();
         split.set_vexpand(true);
+        split.set_min_sidebar_width(260.0);
+        split.set_max_sidebar_width(360.0);
         root.append(&split);
 
         let list = gtk4::ListBox::new();
         list.add_css_class("clip-list");
         list.set_selection_mode(gtk4::SelectionMode::Single);
         let scrolled = gtk4::ScrolledWindow::new();
+        scrolled.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
         scrolled.set_child(Some(&list));
-        let sidebar = adw::ToolbarView::new();
-        sidebar.set_content(Some(&scrolled));
+        let sidebar = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        sidebar.add_css_class("clip-sidebar");
+        sidebar.append(&scrolled);
         let sidebar_page = adw::NavigationPage::new(&sidebar, "History");
         split.set_sidebar(Some(&sidebar_page));
 
         let preview_stack = gtk4::Stack::new();
         preview_stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
+        preview_stack.set_vexpand(true);
         let preview_text = gtk4::TextView::new();
         preview_text.set_monospace(true);
         preview_text.set_wrap_mode(gtk4::WrapMode::WordChar);
@@ -131,7 +148,8 @@ impl ClipperWindow {
         preview_stack.add_named(&img_scroll, Some("image"));
 
         let empty = adw::StatusPage::builder()
-            .title("Select an item")
+            .title("No selection")
+            .description("Choose an item from history to preview, or double-click to copy")
             .icon_name("edit-copy-symbolic")
             .build();
         preview_stack.add_named(&empty, Some("empty"));
@@ -143,11 +161,20 @@ impl ClipperWindow {
         info_label.add_css_class("preview-info-pill");
         info_label.set_halign(gtk4::Align::End);
         info_label.set_valign(gtk4::Align::End);
-        info_label.set_margin_end(12);
-        info_label.set_margin_bottom(12);
+        info_label.set_margin_end(16);
+        info_label.set_margin_bottom(16);
         overlay.add_overlay(&info_label);
 
-        let content_page = adw::NavigationPage::new(&overlay, "Preview");
+        let preview_card = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        preview_card.add_css_class("clip-preview-card");
+        preview_card.set_vexpand(true);
+        preview_card.set_margin_top(12);
+        preview_card.set_margin_bottom(12);
+        preview_card.set_margin_start(12);
+        preview_card.set_margin_end(12);
+        preview_card.append(&overlay);
+
+        let content_page = adw::NavigationPage::new(&preview_card, "Preview");
         split.set_content(Some(&content_page));
 
         let backend = ClipBackend::new();
@@ -317,7 +344,6 @@ impl ClipperWindow {
 
         let focus_guard = Rc::new(RefCell::new(FocusLossGuard::new()));
         install_popup_dismiss(&window, focus_guard.clone());
-        load_css();
 
         Self {
             window,
@@ -328,6 +354,7 @@ impl ClipperWindow {
 
     pub fn present(&self) {
         present_popup(&self.window, &self.focus_guard);
+        self.inner.search.set_text("");
         reload(&self.inner);
         self.inner.search.grab_focus();
     }
@@ -392,18 +419,17 @@ fn apply_filter(inner: &Inner) {
     let mut select_index = None;
     for (i, entry) in visible_entries(inner).into_iter().enumerate() {
         let row = gtk4::ListBoxRow::new();
-        let box_ = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-        box_.set_margin_start(12);
-        box_.set_margin_end(12);
-        box_.set_margin_top(10);
-        box_.set_margin_bottom(10);
+        row.add_css_class("clip-row");
+        let action = adw::ActionRow::builder()
+            .title(&clip_entry_title(&entry.preview))
+            .subtitle(&clip_entry_subtitle(&entry))
+            .build();
 
-        let thumb = gtk4::Image::from_icon_name(if entry.is_image {
-            "image-x-generic-symbolic"
-        } else {
-            "text-x-generic-symbolic"
-        });
-        thumb.set_pixel_size(28);
+        let thumb = gtk4::Image::from_icon_name(clip_entry_icon(&entry.preview, entry.is_image));
+        thumb.set_pixel_size(20);
+        thumb.add_css_class("clip-type-icon");
+        action.add_prefix(&thumb);
+
         if entry.is_image {
             let backend = inner.backend.clone();
             let id = entry.id.clone();
@@ -413,24 +439,20 @@ fn apply_filter(inner: &Inner) {
                 move |bytes| {
                     if let Some(texture) = artwork::texture_from_bytes(&bytes, 48) {
                         thumb_c.set_paintable(Some(&texture));
+                        thumb_c.add_css_class("clip-thumb-image");
                     }
                 },
                 |_| {},
             );
         }
 
-        let label = gtk4::Label::new(Some(&entry.preview));
-        label.set_halign(gtk4::Align::Start);
-        label.set_hexpand(true);
-        label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-        box_.append(&thumb);
-        box_.append(&label);
         if pins.contains(&entry.id) {
             let pin = gtk4::Image::from_icon_name("user-bookmarks-symbolic");
             pin.set_pixel_size(14);
-            box_.append(&pin);
+            pin.add_css_class("clip-pin-icon");
+            action.add_suffix(&pin);
         }
-        row.set_child(Some(&box_));
+        row.set_child(Some(&action));
         inner.list.append(&row);
         if selected.as_ref() == Some(&entry.id) {
             select_index = Some(i as i32);
@@ -572,37 +594,63 @@ fn copy_selected(inner: &Rc<Inner>, close: bool) {
     );
 }
 
-fn load_css() {
-    static LOADED: std::sync::Once = std::sync::Once::new();
-    LOADED.call_once(|| {
-        let provider = CssProvider::new();
-        provider.load_from_string(
-            r#"
-            window { background: alpha(@window_bg_color, 0.95); }
-            .clip-list {
-                background: alpha(@view_fg_color, 0.02);
-                border: 1px solid alpha(@view_fg_color, 0.08);
-                border-radius: 12px;
-            }
-            .preview-text { font-family: monospace; padding: 12px; }
-            .preview-text.editable {
-                background: alpha(@accent_bg_color, 0.08);
-            }
-            .preview-info-pill {
-                background: alpha(@window_bg_color, 0.85);
-                border-radius: 999px;
-                padding: 4px 10px;
-                font-size: 0.8em;
-                opacity: 0.8;
-            }
-            "#,
-        );
-        if let Some(display) = gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
-    });
+fn clip_entry_title(preview: &str) -> String {
+    let line = preview.lines().next().unwrap_or(preview).trim();
+    if line.chars().count() > 72 {
+        format!("{}…", line.chars().take(72).collect::<String>())
+    } else {
+        line.to_string()
+    }
+}
+
+fn clip_entry_subtitle(entry: &ClipEntry) -> String {
+    if entry.is_image {
+        return "Image".to_string();
+    }
+    let trimmed = entry.preview.trim();
+    let kind = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        "Link"
+    } else if looks_like_existing_path(trimmed) {
+        "Path"
+    } else if trimmed.starts_with('$')
+        || trimmed.contains("sudo ")
+        || trimmed.contains('|')
+        || trimmed.starts_with("cd ")
+        || trimmed.starts_with("git ")
+    {
+        "Command"
+    } else if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        "JSON"
+    } else {
+        "Text"
+    };
+    let lines = entry.preview.lines().count();
+    if lines > 1 {
+        format!("{kind} · {lines} lines")
+    } else {
+        kind.to_string()
+    }
+}
+
+fn clip_entry_icon(preview: &str, is_image: bool) -> &'static str {
+    if is_image {
+        return "image-x-generic-symbolic";
+    }
+    let trimmed = preview.trim();
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        "globe-symbolic"
+    } else if looks_like_existing_path(trimmed) {
+        "folder-symbolic"
+    } else if trimmed.starts_with('$')
+        || trimmed.contains("sudo ")
+        || trimmed.contains('|')
+        || trimmed.starts_with("cd ")
+        || trimmed.starts_with("git ")
+    {
+        "utilities-terminal-symbolic"
+    } else if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        "text-x-script-symbolic"
+    } else {
+        "text-x-generic-symbolic"
+    }
 }

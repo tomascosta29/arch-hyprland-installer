@@ -17,6 +17,7 @@ pub enum Target {
     NetworkMenu,
     BluetoothMenu,
     VolumeMenu,
+    MonitorMenu,
     ControlCenter,
     Shutdown,
 }
@@ -36,6 +37,7 @@ impl Target {
             Self::NetworkMenu => "--network-menu",
             Self::BluetoothMenu => "--bluetooth-menu",
             Self::VolumeMenu => "--volume-menu",
+            Self::MonitorMenu => "--monitor-menu",
             Self::ControlCenter => "--control-center",
             Self::Shutdown => "--shutdown",
         }
@@ -54,6 +56,7 @@ impl Target {
             Self::NetworkMenu,
             Self::BluetoothMenu,
             Self::VolumeMenu,
+            Self::MonitorMenu,
             Self::ControlCenter,
             Self::Shutdown,
         ]
@@ -81,6 +84,9 @@ impl Target {
                 Self::BluetoothMenu
             }
             "--volume-menu" | "volume-menu" | "volume_menu" | "volume" => Self::VolumeMenu,
+            "--monitor-menu" | "monitor-menu" | "monitor_menu" | "monitor" | "monitors" => {
+                Self::MonitorMenu
+            }
             "--control-center" | "control-center" | "control_center" | "control" => {
                 Self::ControlCenter
             }
@@ -100,7 +106,7 @@ impl Target {
     }
 }
 
-pub const USAGE: &str = "Usage: costa-utils [--daemon | --app-menu | --runner | --blinker | --blinker-area | --blinker-manager | --clipper | --power-menu | --network-menu | --bluetooth-menu | --volume-menu | --control-center | --shutdown]";
+pub const USAGE: &str = "Usage: costa-utils [--daemon | --app-menu | --runner | --blinker | --blinker-area | --blinker-manager | --clipper | --power-menu | --network-menu | --bluetooth-menu | --volume-menu | --monitor-menu | --control-center | --shutdown]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CliMode {
