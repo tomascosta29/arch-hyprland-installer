@@ -1,13 +1,13 @@
-# Starship Prompt Configuration — Sleek & Compact Single Line
+# Starship Prompt Configuration
 
 format = "$directory$git_branch$git_status$cmd_duration$character "
 
 add_newline = false
 
 [character]
-success_symbol = "[›](bold green)"
-error_symbol = "[›](bold red)"
-vimcmd_symbol = "[‹](bold yellow)"
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+vimcmd_symbol = "[❮](bold yellow)"
 
 [directory]
 style = "bold cyan"
@@ -15,15 +15,15 @@ truncation_length = 3
 truncation_symbol = "…/"
 home_symbol = "~"
 read_only = " [RO]"
-format = "[$path]($style)"
+format = "[$path]($style) "
 
 [git_branch]
 style = "bold purple"
-format = " on [$branch]($style)"
+format = "on [$branch]($style) "
 
 [git_status]
 style = "bold red"
-format = " ([$all_status$ahead_behind]($style))"
+format = "([$all_status$ahead_behind]($style) )"
 conflicted = "="
 ahead = "^${count}"
 behind = "v${count}"
@@ -37,4 +37,4 @@ deleted = "x"
 
 [cmd_duration]
 min_time = 2_000
-format = " took [$duration]"
+format = "took [$duration] "
