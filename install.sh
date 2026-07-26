@@ -280,6 +280,7 @@ COMMON_PACKAGES=(
     grim slurp wl-clipboard brightnessctl libnotify
     pacman-contrib htop lm_sensors man-db man-pages
     jq curl libpulse python
+    zsh starship zoxide fzf zsh-autosuggestions zsh-syntax-highlighting eza bat fastfetch
     ttf-jetbrains-mono-nerd otf-font-awesome
     noto-fonts noto-fonts-emoji noto-fonts-cjk papirus-icon-theme
 )
@@ -297,9 +298,6 @@ case "${INSTALL_PROFILE}" in
 esac
 
 FLAVOR_PACKAGES=()
-if [[ "${INSTALL_FLAVOR}" == "full" ]]; then
-    FLAVOR_PACKAGES+=(zsh)
-fi
 
 log "[4/7] Installing Arch and the ${INSTALL_PROFILE} workstation package set..."
 pacstrap -K /mnt "${COMMON_PACKAGES[@]}" "${PROFILE_PACKAGES[@]}" "${FLAVOR_PACKAGES[@]}"
@@ -350,11 +348,7 @@ cat > /etc/hosts <<HOSTS
 127.0.1.1 ${INSTALL_HOSTNAME}.localdomain ${INSTALL_HOSTNAME}
 HOSTS
 
-if [[ "${INSTALL_FLAVOR}" == "full" ]]; then
-    useradd --create-home --groups wheel --shell /bin/zsh "${INSTALL_USERNAME}"
-else
-    useradd --create-home --groups wheel --shell /bin/bash "${INSTALL_USERNAME}"
-fi
+useradd --create-home --groups wheel --shell /usr/bin/zsh "${INSTALL_USERNAME}"
 passwd --lock root
 
 printf '%%wheel ALL=(ALL:ALL) ALL\n' > /etc/sudoers.d/10-wheel
