@@ -64,9 +64,9 @@ Item {
 
             BarAction {
                 visible: root.primary
-                implicitWidth: 34
+                implicitWidth: 36
                 icon: "󰣇"
-                iconSize: 23
+                iconSize: 25
                 iconVerticalOffset: 3
                 iconColor: Colors.accent
                 onTriggered: Quickshell.execDetached([root.costa, "--app-menu"])

@@ -32,12 +32,12 @@ Singleton {
     readonly property color red: softRed
     readonly property color yellow: softYellow
 
-    readonly property int barHeight: 44
+    readonly property int barHeight: 46
     readonly property int barMargin: 8
     readonly property int barSideMargin: 10
     readonly property int pillRadius: 18
-    readonly property int innerPillHeight: 30
-    readonly property int iconSize: 17
+    readonly property int innerPillHeight: 32
+    readonly property int iconSize: 19
     readonly property int dotSize: 8
 
     readonly property string palettePath: Quickshell.env("HOME") + "/.config/quickshell/costa/colors.css"

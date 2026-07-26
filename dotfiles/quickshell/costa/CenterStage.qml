@@ -88,7 +88,7 @@ Item {
             text: Qt.formatDateTime(clock.date, "ddd, dd MMM")
             color: root.clockHovered ? Colors.foreground : Colors.foregroundDim
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 13
+            font.pixelSize: 15
             font.weight: Font.Medium
 
             Behavior on color {
@@ -101,7 +101,7 @@ Item {
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             width: 1
-            height: 13
+            height: 15
             radius: 0.5
             color: Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.18)
         }
@@ -111,7 +111,7 @@ Item {
             text: Qt.formatDateTime(clock.date, root.clockTimeFormat)
             color: Colors.foreground
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 14
+            font.pixelSize: 16
             font.weight: Font.DemiBold
         }
     }
@@ -141,7 +141,7 @@ Item {
             text: root.eventIcon
             color: root.eventTint
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 17
+            font.pixelSize: 19
         }
 
         Text {
@@ -151,7 +151,7 @@ Item {
             elide: Text.ElideRight
             color: Colors.foreground
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 13
+            font.pixelSize: 15
             font.weight: Font.DemiBold
         }
 
@@ -159,7 +159,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             visible: root.eventDetail !== ""
             width: visible ? 1 : 0
-            height: 12
+            height: 14
             color: Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.16)
         }
 
@@ -171,7 +171,7 @@ Item {
             elide: Text.ElideRight
             color: Colors.foregroundDim
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 12
+            font.pixelSize: 14
             font.weight: Font.Medium
         }
     }

@@ -87,7 +87,7 @@ Rectangle {
                     text: parent.modelData.icon
                     color: parent.modelData.tint
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 14
+                    font.pixelSize: 16
                 }
 
                 Text {
@@ -95,7 +95,7 @@ Rectangle {
                     text: parent.modelData.value
                     color: parent.modelData.tint
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
+                    font.pixelSize: 14
                     font.weight: Font.DemiBold
                 }
             }

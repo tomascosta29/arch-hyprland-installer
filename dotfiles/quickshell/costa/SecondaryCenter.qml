@@ -115,7 +115,7 @@ Item {
             text: root.appIcon(root.context.class)
             color: Colors.accent
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 17
+            font.pixelSize: 19
         }
 
         Text {
@@ -123,14 +123,14 @@ Item {
             text: root.prettyApp(root.context.class)
             color: Colors.foreground
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 13
+            font.pixelSize: 15
             font.weight: Font.DemiBold
         }
 
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             width: 1
-            height: 12
+            height: 14
             color: Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.16)
         }
 
@@ -141,7 +141,7 @@ Item {
             elide: Text.ElideRight
             color: Colors.foregroundDim
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 12
+            font.pixelSize: 14
             font.weight: Font.Medium
         }
 
@@ -153,7 +153,7 @@ Item {
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 1
-                height: 12
+                height: 14
                 color: Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.16)
             }
 
@@ -162,7 +162,7 @@ Item {
                 text: "󰘬"
                 color: root.context.dirty > 0 ? Colors.yellow : Colors.foregroundDim
                 font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 15
+                font.pixelSize: 17
             }
 
             Text {
@@ -172,7 +172,7 @@ Item {
                 elide: Text.ElideRight
                 color: root.context.dirty > 0 ? Colors.yellow : Colors.foregroundDim
                 font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 12
+                font.pixelSize: 14
                 font.weight: Font.Medium
             }
         }
@@ -183,7 +183,7 @@ Item {
             text: "󰎆"
             color: Colors.lavender
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 15
+            font.pixelSize: 17
         }
     }
 
@@ -212,7 +212,7 @@ Item {
             text: root.activity ? root.activity.icon : ""
             color: root.activity ? root.activity.tint : Colors.accent
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 17
+            font.pixelSize: 19
         }
 
         Text {
@@ -222,7 +222,7 @@ Item {
             elide: Text.ElideRight
             color: Colors.foreground
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 13
+            font.pixelSize: 15
             font.weight: Font.DemiBold
         }
 
@@ -230,7 +230,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             visible: root.activity && root.activity.detail !== ""
             width: visible ? 1 : 0
-            height: 12
+            height: 14
             color: Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.16)
         }
 
@@ -242,7 +242,7 @@ Item {
             elide: Text.ElideRight
             color: Colors.foregroundDim
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 12
+            font.pixelSize: 14
             font.weight: Font.Medium
         }
 
@@ -252,7 +252,7 @@ Item {
             text: "+" + (root.activityCount - 1)
             color: Colors.foregroundDim
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 11
+            font.pixelSize: 13
             font.weight: Font.DemiBold
         }
     }
@@ -298,7 +298,7 @@ Item {
             text: "󰥔"
             color: Colors.foregroundDim
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 16
+            font.pixelSize: 18
         }
 
         Text {
@@ -309,7 +309,7 @@ Item {
             )
             color: Colors.foregroundDim
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 13
+            font.pixelSize: 15
             font.weight: Font.Medium
         }
     }

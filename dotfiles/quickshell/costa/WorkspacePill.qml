@@ -90,7 +90,7 @@ Item {
                             return Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.68);
                         }
                         font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
+                        font.pixelSize: 16
                         font.weight: workspace.active ? Font.DemiBold : Font.Medium
 
                         Behavior on color {
