@@ -58,8 +58,9 @@ if command -v eza >/dev/null 2>&1; then
     alias la='eza -a --icons=always --group-directories-first'
     alias lt='eza --tree --level=2 --icons=always --group-directories-first'
 else
-    alias ll='ls -la'
-    alias la='ls -A'
+    alias ls='ls --color=auto --group-directories-first'
+    alias ll='ls -la --color=auto --group-directories-first'
+    alias la='ls -A --color=auto --group-directories-first'
 fi
 
 if command -v bat >/dev/null 2>&1; then
