@@ -12,6 +12,7 @@ readonly MANIFEST_FILE="${STATE_DIR}/managed-files"
 readonly THEME="${1:-fcosta}"
 readonly RELOAD_DESKTOP="${COSTA_DEPLOY_RELOAD:-1}"
 readonly CONFIG_COMPONENTS=(dunst hypr kitty quickshell rofi scripts systemd themes)
+ACTIVE_MONITOR_PROFILE=""
 readonly RETIRED_CONFIG_FILES=(
     hypr/current_colors.conf
     hypr/hyprland.conf
@@ -55,6 +56,12 @@ remove_previous_manifest() {
     while IFS=$'\t' read -r kind relative; do
         [[ -n "${relative}" && "${relative}" != /* ]] || continue
         [[ "/${relative}/" != *"/../"* ]] || continue
+        # Files that remain managed are replaced in place below. Deleting them
+        # first creates a visible gap for live file watchers such as Hyprland
+        # and Quickshell, which then report transient missing-config errors.
+        if grep -Fqx "${kind}"$'\t'"${relative}" "${NEW_MANIFEST}"; then
+            continue
+        fi
         case "${kind}" in
             CONFIG) root="${CONFIG_DIR}" ;;
             DATA) root="${DATA_DIR}" ;;
@@ -73,6 +80,17 @@ remove_previous_manifest() {
     die "COSTA_DEPLOY_RELOAD must be 0 or 1."
 [[ -d "${REPOSITORY_ROOT}/dotfiles/themes/${THEME}" ]] ||
     die "Theme '${THEME}' does not exist."
+
+# `hypr/monitors.lua` is managed infrastructure but its selected profile is
+# mutable user state. Preserve a valid selection before replacing managed files.
+if [[ -f "${CONFIG_DIR}/hypr/monitors.lua" ]]; then
+    ACTIVE_MONITOR_PROFILE="$(
+        sed -n \
+            's/.*require("monitors\.monitors-\(single\|dual-host\)").*/\1/p' \
+            "${CONFIG_DIR}/hypr/monitors.lua" |
+            head -n 1
+    )"
+fi
 
 # Stop the supervised process before replacing its executable, then shut down
 # any legacy launcher-owned singleton that may still hold the D-Bus name.
@@ -106,6 +124,16 @@ for component in "${CONFIG_COMPONENTS[@]}"; do
     mkdir -p "${CONFIG_DIR}/${component}"
     cp -a "${source_dir}/." "${CONFIG_DIR}/${component}/"
 done
+
+if [[ -n "${ACTIVE_MONITOR_PROFILE}" ]]; then
+    monitor_state="$(mktemp "${CONFIG_DIR}/hypr/.monitors.lua.XXXXXX")"
+    printf '%s\n%s\n' \
+        "-- Active Monitor Profile: ${ACTIVE_MONITOR_PROFILE}" \
+        "require(\"monitors.monitors-${ACTIVE_MONITOR_PROFILE}\")" \
+        > "${monitor_state}"
+    chmod 0644 "${monitor_state}"
+    mv -f "${monitor_state}" "${CONFIG_DIR}/hypr/monitors.lua"
+fi
 
 for retired_file in "${RETIRED_CONFIG_FILES[@]}"; do
     rm -f "${CONFIG_DIR}/${retired_file}"

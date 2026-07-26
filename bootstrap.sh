@@ -7,7 +7,6 @@ set -Eeuo pipefail
 
 REPO_OWNER="tomascosta29"
 REPO_NAME="arch-hyprland-installer"
-BRANCH="quickshell"
 
 # Colors
 readonly GREEN='\033[0;32m'
@@ -29,13 +28,14 @@ printf '%s\n' \
     "========================================================================"
 printf '%b\n' "${NC}"
 
-# Check for curl and tar
+# Check bootstrap dependencies
 command -v curl >/dev/null 2>&1 || die "curl is required."
 command -v tar >/dev/null 2>&1 || die "tar is required."
+command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required."
 
 # Ask user for flavor choice upfront
 printf '%bSelect release flavor to download:%b\n' "${YELLOW}" "${NC}"
-printf '  1) Full  - Zsh + Oh My Zsh + Plugins, Neovim with LazyVim starter (Default)\n'
+printf '  1) Full  - Zsh + Starship + packaged plugins, Neovim with LazyVim (Default)\n'
 printf '  2) Light - Bash shell, stock Neovim, minimal footprint\n'
 read -r -p "Selection [1]: " FLAVOR_CHOICE < /dev/tty || FLAVOR_CHOICE="1"
 FLAVOR_CHOICE="${FLAVOR_CHOICE:-1}"
@@ -51,17 +51,23 @@ WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
 RELEASE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/arch-hyprland-installer-${FLAVOR}.tar.gz"
-FALLBACK_TARBALL_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/${BRANCH}.tar.gz"
+CHECKSUM_URL="${RELEASE_URL}.sha256"
 
 log "Downloading ${FLAVOR} flavor package..."
+curl --fail --silent --show-error --location \
+    "${RELEASE_URL}" --output "${WORK_DIR}/package.tar.gz" ||
+    die "Failed to download the ${FLAVOR} release package."
+curl --fail --silent --show-error --location \
+    "${CHECKSUM_URL}" --output "${WORK_DIR}/package.tar.gz.sha256" ||
+    die "Failed to download the release checksum."
 
-if curl --fail --silent --show-error --location "${RELEASE_URL}" --output "${WORK_DIR}/package.tar.gz" 2>/dev/null; then
-    log "Downloaded latest GitHub release asset (${FLAVOR})."
-else
-    warn "Latest release asset not found. Downloading repository archive fallback..."
-    curl --fail --silent --show-error --location "${FALLBACK_TARBALL_URL}" --output "${WORK_DIR}/package.tar.gz" ||
-        die "Failed to download installer package."
-fi
+EXPECTED_SHA256="$(tr -d '[:space:]' < "${WORK_DIR}/package.tar.gz.sha256")"
+[[ "${EXPECTED_SHA256}" =~ ^[0-9a-fA-F]{64}$ ]] ||
+    die "The release checksum is malformed."
+printf '%s  %s\n' "${EXPECTED_SHA256}" "${WORK_DIR}/package.tar.gz" |
+    sha256sum --check --status ||
+    die "Release checksum verification failed."
+log "Downloaded and verified the latest GitHub release asset (${FLAVOR})."
 
 log "Extracting package..."
 tar -xzf "${WORK_DIR}/package.tar.gz" -C "${WORK_DIR}"

@@ -7,9 +7,9 @@ import QtQuick
 Singleton {
     id: root
 
-    readonly property int refreshInterval: 3000
+    readonly property int refreshInterval: 10000
     readonly property int refreshTimeout: 8000
-    readonly property int staleAfter: 12000
+    readonly property int staleAfter: 30000
     property var snapshot: root.emptySnapshot()
     property bool healthy: false
     property real refreshStartedAt: 0

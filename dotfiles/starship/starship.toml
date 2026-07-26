@@ -14,7 +14,6 @@ show_always = true
 [character]
 success_symbol = "[›](bold green)"
 error_symbol = "[›](bold red)"
-vimcmd_symbol = "[‹](bold yellow)"
 
 [directory]
 style = "bold cyan"
@@ -22,7 +21,7 @@ truncation_length = 3
 truncation_symbol = "…/"
 home_symbol = "~"
 read_only = " [RO]"
-format = "[$path]($style) "
+format = "[$path]($style)[$read_only]($read_only_style) "
 
 [git_branch]
 style = "bold purple"
@@ -44,4 +43,4 @@ deleted = "x"
 
 [cmd_duration]
 min_time = 2_000
-format = "took [$duration] "
+format = "took [$duration]($style) "

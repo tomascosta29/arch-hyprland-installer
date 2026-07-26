@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 struct AppEntry {
     info: gio::AppInfo,
+    desktop_id: String,
     name: String,
     search_text: String,
 }
@@ -172,7 +173,7 @@ impl AppMenuWindow {
                 let filtered = inner.filtered_apps.borrow();
                 if let Some(&app_idx) = filtered.get(index) {
                     if let Some(app) = apps.get(app_idx) {
-                        let _ = app.info.launch(&[], gio::AppLaunchContext::NONE);
+                        launch_app(app);
                     }
                 }
                 hide_window(&inner);
@@ -225,7 +226,8 @@ impl AppMenuWindow {
                     }
                     if !cmd.trim().is_empty() {
                         remember_runner_command(&mut inner.history.borrow_mut(), &cmd);
-                        let _ = command::spawn(&["kitty", "--hold", "sh", "-lc", cmd.trim()]);
+                        let _ =
+                            command::spawn_scoped(&["kitty", "--hold", "sh", "-lc", cmd.trim()]);
                         hide_window(&inner);
                     }
                     return glib::Propagation::Stop;
@@ -359,7 +361,7 @@ fn activate_search(inner: &Rc<Inner>) {
             let filtered = inner.filtered_apps.borrow();
             if let Some(&app_idx) = filtered.get(index) {
                 if let Some(app) = apps.get(app_idx) {
-                    let _ = app.info.launch(&[], gio::AppLaunchContext::NONE);
+                    launch_app(app);
                 }
             }
             hide_window(inner);
@@ -369,8 +371,16 @@ fn activate_search(inner: &Rc<Inner>) {
 
 fn run_command_line(inner: &Rc<Inner>, cmd: &str) {
     remember_runner_command(&mut inner.history.borrow_mut(), cmd);
-    let _ = command::spawn(&["sh", "-lc", cmd.trim()]);
+    let _ = command::spawn_scoped(&["sh", "-lc", cmd.trim()]);
     hide_window(inner);
+}
+
+fn launch_app(app: &AppEntry) {
+    if app.desktop_id.is_empty() {
+        let _ = app.info.launch(&[], gio::AppLaunchContext::NONE);
+    } else {
+        let _ = command::spawn_scoped(&["gtk-launch", &app.desktop_id]);
+    }
 }
 
 fn refresh_filter(inner: &Rc<Inner>) {
@@ -576,6 +586,7 @@ fn load_apps() -> Vec<AppEntry> {
         let search_text = format!("{name} {desc}").to_ascii_lowercase();
         apps.push(AppEntry {
             info,
+            desktop_id: id,
             name,
             search_text,
         });

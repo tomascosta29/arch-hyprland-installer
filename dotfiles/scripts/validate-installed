@@ -49,8 +49,9 @@ fi
 PROFILE="${PROFILE:-bare-metal}"
 
 for package in \
-    base linux grub networkmanager firewalld bluez pipewire wireplumber \
-    hyprland quickshell kitty dunst sddm gnome-keyring cliphist jq; do
+    base linux grub networkmanager firewalld pipewire wireplumber \
+    hyprland quickshell kitty dunst sddm gnome-keyring cliphist jq \
+    zram-generator; do
     check "package ${package}" pacman -Q "${package}"
 done
 
@@ -60,6 +61,7 @@ case "${PROFILE}" in
         check "SPICE guest package" pacman -Q spice-vdagent
         ;;
     bare-metal)
+        check "Bluetooth package" pacman -Q bluez
         check "firmware update package" pacman -Q fwupd
         check "SMART tools package" pacman -Q smartmontools
         check "NVMe tools package" pacman -Q nvme-cli
@@ -67,12 +69,15 @@ case "${PROFILE}" in
     *) fail "known install profile (${PROFILE})" ;;
 esac
 
-for unit in NetworkManager.service firewalld.service bluetooth.service sddm.service; do
+for unit in NetworkManager.service firewalld.service sddm.service; do
     check "${unit} enabled" systemctl is-enabled "${unit}"
 done
-if [[ "${PROFILE}" == vm ]]; then
+if [[ "${PROFILE}" == bare-metal ]]; then
+    check "bluetooth.service enabled" systemctl is-enabled bluetooth.service
+else
     check "qemu-guest-agent enabled" systemctl is-enabled qemu-guest-agent.service
 fi
+check "zram configuration" test -f /etc/systemd/zram-generator.conf
 
 check "Costa Utils entry point" test -x "${HOME}/.local/bin/costa-utils"
 check "qs-activity entry point" test -x "${HOME}/.local/bin/qs-activity"

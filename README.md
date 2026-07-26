@@ -21,9 +21,10 @@ the Rust GTK4 `costa-utils` suite.
 - One normal user with sudo access; direct root login remains locked.
 
 The shared desktop baseline includes Mesa and graphics diagnostic tools. The
-bare-metal profile adds `amd-ucode`, RADV (`vulkan-radeon`), firmware updates,
-NVMe/SMART diagnostics, and NTFS support for the separate Windows disk. The VM
-profile adds only the QEMU guest and SPICE agents.
+bare-metal profile adds `amd-ucode`, RADV (`vulkan-radeon`), Bluetooth,
+brightness controls, firmware updates, NVMe/SMART diagnostics, and NTFS support
+for the separate Windows disk. The VM profile adds only the QEMU guest and
+SPICE agents.
 
 ## Deliberate desktop choices
 
@@ -54,10 +55,13 @@ The installer supports two distinct release flavors:
 
 | Flavor | Default Shell | Neovim Setup | Profile Characteristics |
 |---|---|---|---|
-| **Full** (default) | `zsh` with Oh My Zsh and plugins | Neovim with LazyVim starter pre-installed | Full-featured, opinionated configuration |
+| **Full** (default) | `zsh` with Starship and packaged plugins | Neovim with a pinned LazyVim starter | Full-featured, opinionated configuration |
 | **Light** | `bash` | Stock Neovim, no pre-installed configs | Minimal, less opinionated, unbloated |
 
-During the interactive installation, you can confirm or select the desired flavor. Pre-packaged GitHub release archives (e.g. `arch-hyprland-installer-light.tar.gz`) default to their respective flavors and automatically exclude unneeded configuration assets.
+The light flavor omits Zsh, Starship, Zoxide, FZF, Eza, and the Zsh plugins
+from the installed system. Pre-packaged release archives default to their
+respective flavor. The bootstrap downloads the matching SHA-256 file and
+verifies the archive before executing the installer.
 
 To package these releases locally:
 ```bash
@@ -69,13 +73,13 @@ To package these releases locally:
 Boot the latest Arch installation ISO in UEFI mode, connect it to the network, and run the single-command bootstrap installer:
 
 ```bash
-curl -s https://arch.tomascosta.pt | bash
+curl -fsSL https://arch.tomascosta.pt | bash
 ```
 
 Alternatively, if you prefer cloning the repository manually:
 
 ```bash
-pacman -Sy --needed git
+pacman -Syu --needed git
 git clone https://github.com/tomascosta29/arch-hyprland-installer.git
 cd arch-hyprland-installer
 chmod +x install.sh
@@ -95,7 +99,7 @@ The installer:
 6. writes the generated filesystem table to `/etc/fstab`;
 7. installs the shared desktop packages and the selected hardware profile;
 8. creates the user before deploying dotfiles;
-9. enables NetworkManager, firewalld, Bluetooth, and SDDM;
+9. enables NetworkManager, firewalld, and SDDM, plus Bluetooth on bare metal;
 10. configures SDDM login unlocking and password synchronization for GNOME
     Keyring;
 11. applies the default Nordfox theme; and
@@ -240,7 +244,9 @@ Inside the chroot, useful checks are:
 ```bash
 cat /etc/fstab
 grub-mkconfig -o /boot/grub/grub.cfg
-systemctl enable NetworkManager firewalld bluetooth sddm
+systemctl enable NetworkManager firewalld sddm
+# Bare metal only:
+systemctl enable bluetooth
 ```
 
 From a running Hyprland session:

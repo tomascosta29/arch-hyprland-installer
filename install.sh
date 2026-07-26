@@ -9,6 +9,7 @@ readonly YELLOW='\033[1;33m'
 readonly RED='\033[0;31m'
 readonly NC='\033[0m'
 readonly MIN_DISK_BYTES=$((20 * 1024 * 1024 * 1024))
+readonly LAZYVIM_STARTER_COMMIT=803bc181d7c0d6d5eeba9274d9be49b287294d99
 
 TARGET_MOUNTED=false
 INSTALL_FLAVOR="full"
@@ -262,9 +263,9 @@ TARGET_MOUNTED=true
 mount --mkdir "${PART_EFI}" /mnt/boot
 
 COMMON_PACKAGES=(
-    base base-devel linux linux-firmware sudo neovim git openssh
+    base linux linux-firmware sudo neovim git openssh
     grub efibootmgr os-prober dosfstools
-    networkmanager firewalld bluez bluez-utils
+    networkmanager firewalld
     pipewire pipewire-audio pipewire-pulse pipewire-alsa wireplumber
     pavucontrol playerctl sound-theme-freedesktop
     mesa mesa-utils vulkan-tools libva-utils
@@ -275,12 +276,11 @@ COMMON_PACKAGES=(
     sddm nautilus gvfs gvfs-mtp udisks2 gnome-keyring
     desktop-file-utils file-roller
     firefox
-    rust pkgconf gtk4 libadwaita
+    gtk4 libadwaita
     upower cliphist
-    grim slurp wl-clipboard brightnessctl libnotify
+    grim slurp wl-clipboard libnotify
     pacman-contrib htop lm_sensors man-db man-pages
-    jq curl libpulse python
-    zsh starship zoxide fzf zsh-autosuggestions zsh-syntax-highlighting eza bat fastfetch
+    jq curl libpulse python zram-generator
     ttf-jetbrains-mono-nerd otf-font-awesome
     noto-fonts noto-fonts-emoji noto-fonts-cjk papirus-icon-theme
 )
@@ -290,6 +290,7 @@ case "${INSTALL_PROFILE}" in
         PROFILE_PACKAGES=(
             amd-ucode vulkan-radeon
             fwupd smartmontools nvme-cli ntfs-3g
+            bluez bluez-utils brightnessctl
         )
         ;;
     vm)
@@ -297,7 +298,17 @@ case "${INSTALL_PROFILE}" in
         ;;
 esac
 
-FLAVOR_PACKAGES=()
+case "${INSTALL_FLAVOR}" in
+    full)
+        FLAVOR_PACKAGES=(
+            zsh starship zoxide fzf
+            zsh-autosuggestions zsh-syntax-highlighting eza
+        )
+        ;;
+    light)
+        FLAVOR_PACKAGES=()
+        ;;
+esac
 
 log "[4/7] Installing Arch and the ${INSTALL_PROFILE} workstation package set..."
 pacstrap -K /mnt "${COMMON_PACKAGES[@]}" "${PROFILE_PACKAGES[@]}" "${FLAVOR_PACKAGES[@]}"
@@ -348,8 +359,18 @@ cat > /etc/hosts <<HOSTS
 127.0.1.1 ${INSTALL_HOSTNAME}.localdomain ${INSTALL_HOSTNAME}
 HOSTS
 
-useradd --create-home --groups wheel --shell /usr/bin/zsh "${INSTALL_USERNAME}"
+if [[ "${INSTALL_FLAVOR}" == full ]]; then
+    USER_SHELL=/usr/bin/zsh
+else
+    USER_SHELL=/usr/bin/bash
+fi
+useradd --create-home --groups wheel --shell "${USER_SHELL}" "${INSTALL_USERNAME}"
 passwd --lock root
+
+# Compressed in-memory swap improves responsiveness without reserving disk space.
+cat > /etc/systemd/zram-generator.conf <<'ZRAM'
+[zram0]
+ZRAM
 
 printf '%%wheel ALL=(ALL:ALL) ALL\n' > /etc/sudoers.d/10-wheel
 chmod 0440 /etc/sudoers.d/10-wheel
@@ -373,9 +394,10 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 systemctl enable NetworkManager.service
 systemctl enable firewalld.service
-systemctl enable bluetooth.service
 systemctl enable sddm.service
-if [[ "${INSTALL_PROFILE}" == vm ]]; then
+if [[ "${INSTALL_PROFILE}" == bare-metal ]]; then
+    systemctl enable bluetooth.service
+else
     systemctl enable qemu-guest-agent.service
 fi
 
@@ -409,7 +431,7 @@ while IFS= read -r -d '' dotfile_entry; do
     cp -a "${dotfile_entry}" "${USER_HOME}/.config/"
 done < <(
     find "${SCRIPT_DIR}/dotfiles" -mindepth 1 -maxdepth 1 \
-        ! -name sddm ! -name mimeapps.list ! -name zshrc -print0
+        ! -name sddm ! -name mimeapps.list ! -name zshrc ! -name starship -print0
 )
 
 ln -sfn "${USER_HOME}/.config/quickshell/costa/scripts/qs-activity" \
@@ -418,31 +440,26 @@ mkdir -p "${USER_HOME}/.config"
 cp -a "${SCRIPT_DIR}/dotfiles/mimeapps.list" "${USER_HOME}/.config/mimeapps.list"
 
 if [[ "${INSTALL_FLAVOR}" == "full" ]]; then
-    log "Configuring Zsh, Oh My Zsh, plugins, and LazyVim..."
+    log "Configuring Zsh, Starship, packaged plugins, and LazyVim..."
 
     # Deploy custom zshrc if available
     if [[ -f "${SCRIPT_DIR}/dotfiles/zshrc" ]]; then
         cp "${SCRIPT_DIR}/dotfiles/zshrc" "${USER_HOME}/.zshrc"
     fi
+    cp "${SCRIPT_DIR}/dotfiles/starship/starship.toml" \
+        "${USER_HOME}/.config/starship.toml"
 
-    # Clone Oh My Zsh
-    git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "${USER_HOME}/.oh-my-zsh" ||
-        warn "Could not clone Oh My Zsh. Skipping."
-
-    # Clone plugins if Oh My Zsh was successfully cloned
-    if [[ -d "${USER_HOME}/.oh-my-zsh" ]]; then
-        mkdir -p "${USER_HOME}/.oh-my-zsh/custom/plugins"
-        git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git \
-            "${USER_HOME}/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" ||
-            warn "Could not clone zsh-syntax-highlighting."
-        git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions.git \
-            "${USER_HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" ||
-            warn "Could not clone zsh-autosuggestions."
+    # Fetch an immutable LazyVim starter revision for reproducible installs.
+    if git init --quiet "${USER_HOME}/.config/nvim" &&
+        git -C "${USER_HOME}/.config/nvim" remote add origin \
+            https://github.com/LazyVim/starter.git &&
+        git -C "${USER_HOME}/.config/nvim" fetch --quiet --depth=1 \
+            origin "${LAZYVIM_STARTER_COMMIT}" &&
+        git -C "${USER_HOME}/.config/nvim" checkout --quiet --detach FETCH_HEAD; then
+        :
+    else
+        warn "Could not install the pinned LazyVim starter."
     fi
-
-    # Clone LazyVim starter
-    git clone --depth=1 https://github.com/LazyVim/starter "${USER_HOME}/.config/nvim" ||
-        warn "Could not clone LazyVim starter."
     if [[ -d "${USER_HOME}/.config/nvim" ]]; then
         rm -rf "${USER_HOME}/.config/nvim/.git"
     fi
@@ -470,7 +487,7 @@ printf 'CONFIG\tmimeapps.list\n' >> "${MANIFEST_FILE}"
 if [[ ! -x "${SCRIPT_DIR}/costa-utils/bin/costa-utils" ]]; then
     if ! command -v cargo >/dev/null 2>&1; then
         log "Installing rust toolchain on the live installer to build costa-utils..."
-        pacman -Sy --noconfirm --needed rust pkgconf gtk4 libadwaita
+        pacman -Syu --noconfirm --needed rust pkgconf gtk4 libadwaita
     fi
 fi
 # shellcheck source=scripts/lib/costa-utils.sh

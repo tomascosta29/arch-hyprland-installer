@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+disk_free="$(
+  df -BG --output=avail / 2>/dev/null |
+    awk 'NR == 2 { gsub(/[[:space:]]|G/, "", $1); print $1 }'
+)"
+[[ "${disk_free}" =~ ^[0-9]+$ ]] || disk_free=0
+
+zram_used=0
+if [[ -r /sys/block/zram0/mm_stat ]]; then
+  read -r zram_used _ < /sys/block/zram0/mm_stat
+  [[ "${zram_used}" =~ ^[0-9]+$ ]] || zram_used=0
+fi
+
+interface="$(
+  ip -j route show default 2>/dev/null |
+    jq -r 'sort_by(.metric // 0) | map(select(.dev != "lo")) | .[0].dev // empty' 2>/dev/null ||
+    true
+)"
+if [[ -z "${interface}" ]]; then
+  interface="$(
+    awk '$2 == "00000000" && $1 != "lo" { print $8, $1 }' /proc/net/route 2>/dev/null |
+      sort -n |
+      awk 'NR == 1 { print $2 }'
+  )"
+fi
+
+connectivity=offline
+latency_ms=0
+if [[ -n "${interface}" ]]; then
+  response_file="$(mktemp)"
+  trap 'rm -f "${response_file}"' EXIT
+  curl_result="$(
+    curl --silent --show-error --location \
+      --connect-timeout 2 --max-time 3 \
+      --output "${response_file}" \
+      --write-out '%{http_code} %{time_total}' \
+      http://ping.archlinux.org/nm-check.txt 2>/dev/null ||
+      true
+  )"
+  read -r http_code elapsed <<< "${curl_result}"
+  if [[ "${elapsed:-}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    latency_ms="$(awk -v seconds="${elapsed}" 'BEGIN { printf "%.0f", seconds * 1000 }')"
+  fi
+  if [[ "${http_code:-}" == 200 ]] &&
+      grep -Fxq "NetworkManager is online" "${response_file}"; then
+    connectivity=online
+  elif [[ "${http_code:-}" =~ ^[23] ]]; then
+    connectivity=portal
+  else
+    connectivity=limited
+  fi
+fi
+
+jq -cn \
+  --argjson disk_free_gib "${disk_free}" \
+  --argjson zram_used_bytes "${zram_used}" \
+  --arg interface "${interface}" \
+  --arg connectivity "${connectivity}" \
+  --argjson latency_ms "${latency_ms}" \
+  '{
+    disk_free_gib: $disk_free_gib,
+    zram_used_bytes: $zram_used_bytes,
+    interface: $interface,
+    connectivity: $connectivity,
+    latency_ms: $latency_ms
+  }'

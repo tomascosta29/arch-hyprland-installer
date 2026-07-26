@@ -144,3 +144,26 @@ pub fn spawn(argv: &[&str]) -> Result<()> {
         })?;
     Ok(())
 }
+
+/// Fire-and-forget a long-lived desktop workload in its own systemd scope.
+///
+/// Costa is a resident user service, so direct children would otherwise stay
+/// in `costa-utils.service` and contaminate its accounting and lifetime.
+pub fn spawn_scoped(argv: &[&str]) -> Result<()> {
+    if argv.is_empty() {
+        return Err(Error::Message("empty command".into()));
+    }
+    let owned: Vec<String> = argv.iter().map(|s| (*s).to_string()).collect();
+    Command::new("systemd-run")
+        .args(["--user", "--scope", "--quiet", "--collect", "--"])
+        .args(&owned)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|source| Error::CommandSpawn {
+            argv: owned,
+            source,
+        })?;
+    Ok(())
+}

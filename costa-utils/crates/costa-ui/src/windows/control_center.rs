@@ -40,6 +40,7 @@ struct Inner {
     media_artist: gtk4::Label,
     play_btn: gtk4::Button,
     media_poll: Cell<Option<glib::SourceId>>,
+    media_artwork_url: RefCell<String>,
     volume_debouncer: Debouncer,
     brightness_debouncer: Debouncer,
 }
@@ -260,6 +261,7 @@ impl ControlCenterWindow {
             media_artist,
             play_btn: play_btn.clone(),
             media_poll: Cell::new(None),
+            media_artwork_url: RefCell::new(String::new()),
             volume_debouncer,
             brightness_debouncer,
         });
@@ -592,7 +594,7 @@ fn poll_media(inner: &Rc<Inner>) {
     );
 }
 
-fn apply_media(inner: &Inner, media: MediaState) {
+fn apply_media(inner: &Rc<Inner>, media: MediaState) {
     if !media.has_track() {
         inner.media_card.set_visible(false);
         return;
@@ -607,26 +609,44 @@ fn apply_media(inner: &Inner, media: MediaState) {
     inner.media_card.set_visible(true);
 
     if media.artwork_url.is_empty() {
+        inner.media_artwork_url.borrow_mut().clear();
         inner
             .media_art
             .set_icon_name(Some("audio-x-generic-symbolic"));
         return;
     }
+    if *inner.media_artwork_url.borrow() == media.artwork_url {
+        return;
+    }
+    *inner.media_artwork_url.borrow_mut() = media.artwork_url.clone();
+
     let backend = inner.media.clone();
     let url = media.artwork_url.clone();
-    let art = inner.media_art.clone();
+    let loaded_url = url.clone();
+    let failed_url = url.clone();
+    let inner_success = inner.clone();
+    let inner_error = inner.clone();
     spawn_result(
         move || backend.fetch_artwork(&url),
         move |bytes| {
+            if *inner_success.media_artwork_url.borrow() != loaded_url {
+                return;
+            }
             if let Some(texture) = crate::artwork::texture_from_bytes(&bytes, 48) {
-                art.set_paintable(Some(&texture));
+                inner_success.media_art.set_paintable(Some(&texture));
             } else {
-                art.set_icon_name(Some("audio-x-generic-symbolic"));
+                inner_success
+                    .media_art
+                    .set_icon_name(Some("audio-x-generic-symbolic"));
             }
         },
-        {
-            let art = inner.media_art.clone();
-            move |_| art.set_icon_name(Some("audio-x-generic-symbolic"))
+        move |_| {
+            if *inner_error.media_artwork_url.borrow() == failed_url {
+                inner_error
+                    .media_art
+                    .set_icon_name(Some("audio-x-generic-symbolic"));
+                inner_error.media_artwork_url.borrow_mut().clear();
+            }
         },
     );
 }

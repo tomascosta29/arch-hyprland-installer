@@ -5,26 +5,78 @@ read -r _ user nice system idle iowait irq softirq steal _ < /proc/stat
 total=$((user + nice + system + idle + iowait + irq + softirq + steal))
 idle_total=$((idle + iowait))
 
-memory="$(
+read -r memory_used memory_total < <(
   awk '
     /MemTotal/ { total = $2 }
     /MemAvailable/ { available = $2 }
-    END { printf "%.1fG", (total - available) / 1024 / 1024 }
+    END {
+      used = (total - available) / 1024 / 1024
+      total_gib = total / 1024 / 1024
+      printf "%.1fG %.0fG\n", used, total_gib
+    }
   ' /proc/meminfo
-)"
+)
 
 gpu=""
+gpu_temperature=""
+vram_used=""
+vram_total=""
+gpu_power=""
+gpu_fan=""
+gpu_device=""
+gpu_total_max=0
 for device in /sys/class/drm/card*/device; do
   [[ -d "${device}" ]] || continue
   driver="$(readlink -f "${device}/driver" 2>/dev/null || true)"
-  if [[ "${driver##*/}" == "amdgpu" && -r "${device}/gpu_busy_percent" ]]; then
-    read -r gpu < "${device}/gpu_busy_percent"
-    break
+  [[ "${driver##*/}" == "amdgpu" && -r "${device}/gpu_busy_percent" ]] || continue
+  candidate_total=0
+  [[ -r "${device}/mem_info_vram_total" ]] &&
+    read -r candidate_total < "${device}/mem_info_vram_total"
+  [[ "${candidate_total}" =~ ^[0-9]+$ ]] || candidate_total=0
+  if (( candidate_total >= gpu_total_max )); then
+    gpu_total_max="${candidate_total}"
+    gpu_device="${device}"
   fi
 done
-[[ "${gpu}" =~ ^[0-9]+$ ]] && gpu="${gpu}%" || gpu="—"
 
-temperature=""
+if [[ -n "${gpu_device}" ]]; then
+  read -r gpu < "${gpu_device}/gpu_busy_percent"
+  [[ -r "${gpu_device}/mem_info_vram_used" ]] &&
+    read -r vram_used < "${gpu_device}/mem_info_vram_used"
+  [[ -r "${gpu_device}/mem_info_vram_total" ]] &&
+    read -r vram_total < "${gpu_device}/mem_info_vram_total"
+
+  for sensor in "${gpu_device}"/hwmon/hwmon*; do
+    [[ -d "${sensor}" ]] || continue
+    for input in "${sensor}"/temp*_input; do
+      [[ -r "${input}" ]] || continue
+      label_file="${input%_input}_label"
+      label=""
+      [[ -r "${label_file}" ]] && read -r label < "${label_file}"
+      if [[ "${label,,}" == "edge" || -z "${gpu_temperature}" ]]; then
+        read -r gpu_temperature < "${input}"
+      fi
+      [[ "${label,,}" == "edge" ]] && break
+    done
+    [[ -r "${sensor}/power1_average" ]] && read -r gpu_power < "${sensor}/power1_average"
+    [[ -r "${sensor}/fan1_input" ]] && read -r gpu_fan < "${sensor}/fan1_input"
+    break
+  done
+fi
+[[ "${gpu}" =~ ^[0-9]+$ ]] && gpu="${gpu}%" || gpu="—"
+[[ "${gpu_temperature}" =~ ^[0-9]+$ ]] &&
+  gpu_temperature="$((gpu_temperature / 1000))°" || gpu_temperature="—"
+if [[ "${vram_used}" =~ ^[0-9]+$ && "${vram_total}" =~ ^[0-9]+$ && "${vram_total}" -gt 0 ]]; then
+  vram_used="$(awk -v bytes="${vram_used}" 'BEGIN { printf "%.1fG", bytes / 1073741824 }')"
+  vram_total="$(awk -v bytes="${vram_total}" 'BEGIN { printf "%.0fG", bytes / 1073741824 }')"
+else
+  vram_used="—"
+  vram_total="—"
+fi
+[[ "${gpu_power}" =~ ^[0-9]+$ ]] && gpu_power="$((gpu_power / 1000000))W" || gpu_power=""
+[[ "${gpu_fan}" =~ ^[0-9]+$ && "${gpu_fan}" -gt 0 ]] && gpu_fan="${gpu_fan}rpm" || gpu_fan=""
+
+cpu_temperature=""
 for sensor in /sys/class/hwmon/hwmon*; do
   [[ -r "${sensor}/name" ]] || continue
   read -r sensor_name < "${sensor}/name"
@@ -35,28 +87,47 @@ for sensor in /sys/class/hwmon/hwmon*; do
     label_file="${input%_input}_label"
     label=""
     [[ -r "${label_file}" ]] && read -r label < "${label_file}"
-    if [[ "${label}" == "Tctl" || -z "${temperature}" ]]; then
-      read -r temperature < "${input}"
+    if [[ "${label}" == "Tctl" || -z "${cpu_temperature}" ]]; then
+      read -r cpu_temperature < "${input}"
     fi
     [[ "${label}" == "Tctl" ]] && break
   done
-  [[ -n "${temperature}" ]] && break
+  [[ -n "${cpu_temperature}" ]] && break
 done
 
-if [[ ! "${temperature}" =~ ^[0-9]+$ ]]; then
+if [[ ! "${cpu_temperature}" =~ ^[0-9]+$ ]]; then
   for input in /sys/class/thermal/thermal_zone*/temp; do
     [[ -r "${input}" ]] || continue
-    read -r temperature < "${input}"
-    [[ "${temperature}" =~ ^[0-9]+$ ]] && break
+    read -r cpu_temperature < "${input}"
+    [[ "${cpu_temperature}" =~ ^[0-9]+$ ]] && break
   done
 fi
 
-[[ "${temperature}" =~ ^[0-9]+$ ]] && temperature="$((temperature / 1000))°" || temperature="—"
+[[ "${cpu_temperature}" =~ ^[0-9]+$ ]] &&
+  cpu_temperature="$((cpu_temperature / 1000))°" || cpu_temperature="—"
 
 jq -cn \
   --argjson total "${total}" \
   --argjson idle "${idle_total}" \
-  --arg mem "${memory}" \
+  --arg mem_used "${memory_used}" \
+  --arg mem_total "${memory_total}" \
   --arg gpu "${gpu}" \
-  --arg temp "${temperature}" \
-  '{total: $total, idle: $idle, mem: $mem, gpu: $gpu, temp: $temp}'
+  --arg cpu_temp "${cpu_temperature}" \
+  --arg gpu_temp "${gpu_temperature}" \
+  --arg vram_used "${vram_used}" \
+  --arg vram_total "${vram_total}" \
+  --arg gpu_power "${gpu_power}" \
+  --arg gpu_fan "${gpu_fan}" \
+  '{
+    total: $total,
+    idle: $idle,
+    mem_used: $mem_used,
+    mem_total: $mem_total,
+    gpu: $gpu,
+    cpu_temp: $cpu_temp,
+    gpu_temp: $gpu_temp,
+    vram_used: $vram_used,
+    vram_total: $vram_total,
+    gpu_power: $gpu_power,
+    gpu_fan: $gpu_fan
+  }'

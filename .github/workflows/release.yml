@@ -30,5 +30,7 @@ jobs:
         run: |
           gh release upload ${{ github.event.release.tag_name }} \
             dist/arch-hyprland-installer-full.tar.gz \
+            dist/arch-hyprland-installer-full.tar.gz.sha256 \
             dist/arch-hyprland-installer-light.tar.gz \
+            dist/arch-hyprland-installer-light.tar.gz.sha256 \
             --clobber

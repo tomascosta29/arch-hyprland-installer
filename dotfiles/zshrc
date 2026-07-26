@@ -16,9 +16,7 @@ HISTSIZE=50000
 SAVEHIST=50000
 
 # Options
-setopt APPEND_HISTORY          # Append to history file on exit
 setopt SHARE_HISTORY           # Share history between all active sessions
-setopt INC_APPEND_HISTORY      # Write to history immediately, not when shell exits
 setopt HIST_IGNORE_ALL_DUPS    # Delete old duplicate entry if new entry is duplicate
 setopt HIST_IGNORE_SPACE       # Don't record commands starting with a space
 setopt HIST_SAVE_NO_DUPS       # Don't write duplicate entries in history file
@@ -63,18 +61,6 @@ else
     alias la='ls -A --color=auto --group-directories-first'
 fi
 
-if command -v bat >/dev/null 2>&1; then
-    alias cat='bat --style=header,grid'
-fi
-
-if command -v ripgrep >/dev/null 2>&1 || command -v rg >/dev/null 2>&1; then
-    alias grep='rg'
-fi
-
-if command -v fd >/dev/null 2>&1; then
-    alias find='fd'
-fi
-
 alias g='git'
 alias gs='git status'
 alias gd='git diff'
@@ -94,6 +80,11 @@ if command -v zoxide >/dev/null 2>&1; then
     eval "$(zoxide init zsh)"
 fi
 
+# Starship Prompt
+if command -v starship >/dev/null 2>&1; then
+    eval "$(starship init zsh)"
+fi
+
 # Zsh Autosuggestions
 if [[ -f /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
     source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
@@ -103,9 +94,4 @@ fi
 # Zsh Syntax Highlighting (must be loaded last)
 if [[ -f /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
     source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-fi
-
-# Starship Prompt
-if command -v starship >/dev/null 2>&1; then
-    eval "$(starship init zsh)"
 fi

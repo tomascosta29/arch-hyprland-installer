@@ -4,7 +4,9 @@ set -uo pipefail
 runtime_base="${XDG_RUNTIME_DIR:-/tmp}"
 state_dir="${runtime_base}/quickshell-costa"
 state_file="${state_dir}/network-state"
-mkdir -p "${state_dir}"
+git_cache_dir="${state_dir}/git-context"
+git_cache_ttl=30
+mkdir -p "${git_cache_dir}"
 
 clients="$(hyprctl -j clients 2>/dev/null | jq -c . 2>/dev/null || printf '[]')"
 monitors="$(hyprctl -j monitors 2>/dev/null | jq -c . 2>/dev/null || printf '[]')"
@@ -57,6 +59,19 @@ process_table="$(ps -eo pid=,ppid=,etimes=,comm=,args= 2>/dev/null || true)"
 
 git_context_for_pid() {
   local root_pid="$1"
+  local cache_file="${git_cache_dir}/${root_pid}"
+  local now cached_at cached_repo cached_branch cached_dirty
+  now="$(date +%s)"
+  if [[ -r "${cache_file}" ]]; then
+    IFS=$'\t' read -r cached_at cached_repo cached_branch cached_dirty < "${cache_file}" || true
+    if [[ "${cached_at:-}" =~ ^[0-9]+$ ]] &&
+        (( now - cached_at < git_cache_ttl )); then
+      printf '%s|%s|%s\n' \
+        "${cached_repo:-}" "${cached_branch:-}" "${cached_dirty:-0}"
+      return
+    fi
+  fi
+
   local -a queue=("${root_pid}")
   local -a all_pids=()
   local index=0
@@ -81,10 +96,13 @@ git_context_for_pid() {
     branch="$(timeout 1s git -C "${repo}" branch --show-current 2>/dev/null || true)"
     [[ -n "${branch}" ]] || branch="$(timeout 1s git -C "${repo}" rev-parse --short HEAD 2>/dev/null || true)"
     dirty="$(timeout 1s git -C "${repo}" status --porcelain --untracked-files=normal 2>/dev/null | wc -l)"
+    printf '%s\t%s\t%s\t%s\n' \
+      "${now}" "${repo##*/}" "${branch}" "${dirty//[[:space:]]/}" > "${cache_file}"
     printf '%s|%s|%s\n' "${repo##*/}" "${branch}" "${dirty//[[:space:]]/}"
     return
   done
 
+  printf '%s\t\t\t0\n' "${now}" > "${cache_file}"
   printf '||0\n'
 }
 

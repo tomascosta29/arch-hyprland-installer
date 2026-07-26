@@ -52,13 +52,13 @@ build_flavor() {
     # Set the default flavor in install.sh
     sed -i "s/^INSTALL_FLAVOR=\"full\"/INSTALL_FLAVOR=\"${flavor}\"/" "${target_dir}/install.sh"
 
-    # If it is the light flavor, remove full-only assets to prevent bloat
-    if [[ "${flavor}" == "light" ]]; then
-        rm -f "${target_dir}/dotfiles/zshrc"
-    fi
-
     # Create tar.gz archive in the dist directory
     tar -czf "${DIST_DIR}/${archive_name}.tar.gz" -C "${TEMP_DIR}" "${archive_name}"
+    (
+        cd "${DIST_DIR}"
+        sha256sum "${archive_name}.tar.gz" |
+            awk '{ print $1 }' > "${archive_name}.tar.gz.sha256"
+    )
     log "Created ${DIST_DIR}/${archive_name}.tar.gz"
 }
 

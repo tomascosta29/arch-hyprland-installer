@@ -73,6 +73,58 @@ class InstallerTests(unittest.TestCase):
     def test_installer_offers_flavor_selection(self):
         self.assertIn('INSTALL_FLAVOR="full"', self.installer)
         self.assertIn("Installation flavor (full/light)", self.installer)
+        self.assertIn("FLAVOR_PACKAGES=(", self.installer)
+        self.assertIn("USER_SHELL=/usr/bin/zsh", self.installer)
+        self.assertIn("USER_SHELL=/usr/bin/bash", self.installer)
+
+    def test_light_flavor_omits_full_shell_tooling(self):
+        common = re.search(
+            r"COMMON_PACKAGES=\((.*?)\)\s+case \"\\?\$\{INSTALL_PROFILE\}\"",
+            self.installer,
+            flags=re.DOTALL,
+        )
+        full = re.search(
+            r"full\)\s+FLAVOR_PACKAGES=\((.*?)\)\s+;;",
+            self.installer,
+            flags=re.DOTALL,
+        )
+        light = re.search(
+            r"light\)\s+FLAVOR_PACKAGES=\((.*?)\)\s+;;",
+            self.installer,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(common)
+        self.assertIsNotNone(full)
+        self.assertIsNotNone(light)
+        for package in (
+            "zsh",
+            "starship",
+            "zoxide",
+            "fzf",
+            "zsh-autosuggestions",
+            "zsh-syntax-highlighting",
+            "eza",
+        ):
+            self.assertNotRegex(common.group(1), rf"\b{re.escape(package)}\b")
+            self.assertRegex(full.group(1), rf"\b{re.escape(package)}\b")
+            self.assertNotRegex(light.group(1), rf"\b{re.escape(package)}\b")
+
+        kitty = (REPOSITORY_ROOT / "dotfiles" / "kitty" / "kitty.conf").read_text()
+        self.assertNotIn("shell /usr/bin/zsh", kitty)
+        self.assertNotIn("Oh My Zsh", self.installer)
+        self.assertNotIn("ohmyzsh", self.installer)
+        self.assertRegex(self.installer, r"LAZYVIM_STARTER_COMMIT=[0-9a-f]{40}")
+        self.assertIn('"${USER_HOME}/.config/starship.toml"', self.installer)
+        for build_package in ("base-devel", "rust", "pkgconf"):
+            self.assertNotRegex(
+                common.group(1),
+                rf"\b{re.escape(build_package)}\b",
+            )
+        for removed_utility in ("bat", "fastfetch"):
+            self.assertNotRegex(
+                common.group(1) + full.group(1),
+                rf"\b{re.escape(removed_utility)}\b",
+            )
 
     def test_installer_remains_interactive(self):
         self.assertNotIn("COSTA_INSTALL_NONINTERACTIVE", self.installer)
@@ -137,13 +189,26 @@ class InstallerTests(unittest.TestCase):
         self.assertIsNotNone(bare_metal)
         self.assertIsNotNone(vm)
 
-        for package in ("fwupd", "smartmontools", "nvme-cli", "ntfs-3g"):
+        for package in (
+            "fwupd",
+            "smartmontools",
+            "nvme-cli",
+            "ntfs-3g",
+            "bluez",
+            "bluez-utils",
+            "brightnessctl",
+        ):
             self.assertRegex(bare_metal.group(1), rf"\b{re.escape(package)}\b")
             self.assertNotRegex(vm.group(1), rf"\b{re.escape(package)}\b")
 
         for package in ("qemu-guest-agent", "spice-vdagent"):
             self.assertRegex(vm.group(1), rf"\b{re.escape(package)}\b")
             self.assertNotRegex(bare_metal.group(1), rf"\b{re.escape(package)}\b")
+
+    def test_installer_configures_zram_without_disk_swap(self):
+        self.assertRegex(self.installer, r"\bzram-generator\b")
+        self.assertIn("/etc/systemd/zram-generator.conf", self.installer)
+        self.assertNotIn("mkswap", self.installer)
 
     def test_dual_disk_boot_and_keyring_integration_remain_enabled(self):
         self.assertRegex(self.installer, r"\bos-prober\b")
@@ -505,6 +570,43 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("status=$?", script)
         self.assertNotIn("|| true", script)
 
+    def test_secondary_telemetry_is_grouped_and_bounded(self):
+        qs_dir = REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa"
+        telemetry = (qs_dir / "Telemetry.qml").read_text()
+        adaptive = (qs_dir / "AdaptiveTelemetry.qml").read_text()
+        status = (qs_dir / "scripts" / "status-telemetry").read_text()
+        system = (qs_dir / "scripts" / "system-telemetry").read_text()
+
+        for field in (
+            "mem_total",
+            "cpu_temp",
+            "gpu_temp",
+            "vram_used",
+            "vram_total",
+        ):
+            self.assertIn(field, system)
+        for field in ("disk_free_gib", "connectivity", "latency_ms"):
+            self.assertIn(field, status)
+        self.assertIn("--connect-timeout 2 --max-time 3", status)
+        self.assertIn("interval: 60000", telemetry)
+        self.assertIn("interval: 1800000", telemetry)
+        for label in ("CPU", "RAM", "GPU", "free", "No internet", "Offline"):
+            self.assertIn(label, adaptive)
+        self.assertIn("Observatory.networkRx", adaptive)
+        self.assertIn("Observatory.networkTx", adaptive)
+
+    def test_observatory_polling_is_bounded_and_git_context_is_cached(self):
+        qs_dir = REPOSITORY_ROOT / "dotfiles" / "quickshell" / "costa"
+        observatory = (qs_dir / "Observatory.qml").read_text()
+        telemetry = (qs_dir / "Telemetry.qml").read_text()
+        snapshot = (qs_dir / "scripts" / "observatory-snapshot").read_text()
+
+        self.assertIn("refreshInterval: 10000", observatory)
+        self.assertIn("staleAfter: 30000", observatory)
+        self.assertIn("interval: 5000", telemetry)
+        self.assertIn("git_cache_ttl=30", snapshot)
+        self.assertIn('git_cache_dir="${state_dir}/git-context"', snapshot)
+
     def test_runner_history_is_private(self):
         source = (
             REPOSITORY_ROOT
@@ -569,8 +671,11 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("COSTA_DEPLOY_RELOAD", deployer)
         self.assertIn("remove_previous_manifest", deployer)
         self.assertIn("qs-activity", deployer)
+        self.assertIn("ACTIVE_MONITOR_PROFILE", deployer)
+        self.assertIn("monitors-${ACTIVE_MONITOR_PROFILE}", deployer)
         self.assertNotIn('pkill -f "${BIN_DIR}/costa-utils"', deployer)
         self.assertNotIn("costa_utils.py", deployer)
+        self.assertIn('grep -Fqx "${kind}"', deployer)
 
     def test_quickshell_vm_profile_omits_bare_metal_sensors(self):
         vm = self.load_json(
