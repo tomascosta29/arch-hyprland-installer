@@ -1,6 +1,7 @@
 use crate::windows::{
     AppMenuWindow, BlinkerManagerWindow, BlinkerWindow, BluetoothWindow, ClipperWindow,
-    ControlCenterWindow, MonitorWindow, NetworkWindow, PowerWindow, VolumeWindow,
+    ControlCenterWindow, KeybindingsWindow, MonitorWindow, NetworkWindow, PowerWindow,
+    VolumeWindow,
 };
 use crate::ACTIVATE_TARGET_ACTION;
 use adw::prelude::*;
@@ -26,6 +27,7 @@ struct Windows {
     blinker: Option<BlinkerWindow>,
     blinker_manager: Option<BlinkerManagerWindow>,
     monitor: Option<MonitorWindow>,
+    keybindings: Option<KeybindingsWindow>,
     control_center: Option<ControlCenterWindow>,
 }
 
@@ -180,6 +182,12 @@ fn activate_target(app: &adw::Application, state: &AppState, target: Target) {
             }
             windows.blinker.as_ref().unwrap().capture_area();
         }
+        Target::BlinkerWindow => {
+            if windows.blinker.is_none() {
+                windows.blinker = Some(BlinkerWindow::new(app));
+            }
+            windows.blinker.as_ref().unwrap().capture_window();
+        }
         Target::BlinkerManager => {
             if windows.blinker_manager.is_none() {
                 windows.blinker_manager = Some(BlinkerManagerWindow::new(app));
@@ -191,6 +199,12 @@ fn activate_target(app: &adw::Application, state: &AppState, target: Target) {
                 windows.monitor = Some(MonitorWindow::new(app));
             }
             windows.monitor.as_ref().unwrap().present();
+        }
+        Target::Keybindings => {
+            if windows.keybindings.is_none() {
+                windows.keybindings = Some(KeybindingsWindow::new(app));
+            }
+            windows.keybindings.as_ref().unwrap().present();
         }
         Target::ControlCenter => {
             if windows.control_center.is_none() {

@@ -1,0 +1,9 @@
+amd-ucode
+bluez
+bluez-utils
+brightnessctl
+fwupd
+ntfs-3g
+nvme-cli
+smartmontools
+vulkan-radeon

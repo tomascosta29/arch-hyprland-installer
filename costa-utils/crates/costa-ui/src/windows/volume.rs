@@ -429,7 +429,10 @@ fn apply_snapshot(state: &VolumeState, snapshot: AudioSnapshot) {
 
     state.updating_sliders.set(true);
     if let Some(sink) = active_sink {
-        state.widgets.out_slider.set_value(sink.volume_percent.round());
+        state
+            .widgets
+            .out_slider
+            .set_value(sink.volume_percent.round());
         state
             .widgets
             .out_vol_val

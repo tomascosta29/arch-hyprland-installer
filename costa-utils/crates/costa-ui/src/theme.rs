@@ -301,73 +301,73 @@ headerbar windowcontrols {
 .toggle-card-bt.toggle-card-active {
     background: linear-gradient(
         to bottom,
-        alpha(#719cd6, 0.06),
-        alpha(#719cd6, 0.03)
+        alpha(@accent_bg_color, 0.06),
+        alpha(@accent_bg_color, 0.03)
     );
-    border-color: alpha(#719cd6, 0.4);
+    border-color: alpha(@accent_bg_color, 0.4);
 }
 
 .toggle-card-wifi.toggle-card-active:hover,
 .toggle-card-bt.toggle-card-active:hover {
     background: linear-gradient(
         to bottom,
-        alpha(#719cd6, 0.09),
-        alpha(#719cd6, 0.04)
+        alpha(@accent_bg_color, 0.09),
+        alpha(@accent_bg_color, 0.04)
     );
-    border-color: alpha(#719cd6, 0.52);
+    border-color: alpha(@accent_bg_color, 0.52);
 }
 
 .toggle-card-wifi.toggle-card-active .toggle-icon,
 .toggle-card-wifi.toggle-card-active .toggle-subtitle,
 .toggle-card-bt.toggle-card-active .toggle-icon,
 .toggle-card-bt.toggle-card-active .toggle-subtitle {
-    color: #86abdc;
+    color: @accent_color;
 }
 
 .toggle-card-nightlight.toggle-card-active {
     background: linear-gradient(
         to bottom,
-        alpha(#e0af68, 0.06),
-        alpha(#e0af68, 0.03)
+        alpha(@warning_bg_color, 0.06),
+        alpha(@warning_bg_color, 0.03)
     );
-    border-color: alpha(#e0af68, 0.4);
+    border-color: alpha(@warning_bg_color, 0.4);
 }
 
 .toggle-card-nightlight.toggle-card-active:hover {
     background: linear-gradient(
         to bottom,
-        alpha(#e0af68, 0.09),
-        alpha(#e0af68, 0.04)
+        alpha(@warning_bg_color, 0.09),
+        alpha(@warning_bg_color, 0.04)
     );
-    border-color: alpha(#e0af68, 0.52);
+    border-color: alpha(@warning_bg_color, 0.52);
 }
 
 .toggle-card-nightlight.toggle-card-active .toggle-icon,
 .toggle-card-nightlight.toggle-card-active .toggle-subtitle {
-    color: #e0af68;
+    color: @warning_color;
 }
 
 .toggle-card-dnd.toggle-card-active {
     background: linear-gradient(
         to bottom,
-        alpha(#b48ead, 0.06),
-        alpha(#b48ead, 0.03)
+        alpha(@accent_bg_color, 0.06),
+        alpha(@accent_bg_color, 0.03)
     );
-    border-color: alpha(#b48ead, 0.4);
+    border-color: alpha(@accent_bg_color, 0.4);
 }
 
 .toggle-card-dnd.toggle-card-active:hover {
     background: linear-gradient(
         to bottom,
-        alpha(#b48ead, 0.09),
-        alpha(#b48ead, 0.04)
+        alpha(@accent_bg_color, 0.09),
+        alpha(@accent_bg_color, 0.04)
     );
-    border-color: alpha(#b48ead, 0.52);
+    border-color: alpha(@accent_bg_color, 0.52);
 }
 
 .toggle-card-dnd.toggle-card-active .toggle-icon,
 .toggle-card-dnd.toggle-card-active .toggle-subtitle {
-    color: #c0a0c8;
+    color: @accent_color;
 }
 
 .toggle-icon {
@@ -400,10 +400,10 @@ headerbar windowcontrols {
 }
 
 .cc-row-icon {
-    color: #86abdc;
+    color: @accent_color;
     opacity: 0.9;
-    background: alpha(#719cd6, 0.09);
-    border: 1px solid alpha(#719cd6, 0.1);
+    background: alpha(@accent_bg_color, 0.09);
+    border: 1px solid alpha(@accent_bg_color, 0.1);
     border-radius: 8px;
     box-shadow: none;
     padding: 6px;
@@ -413,9 +413,9 @@ headerbar windowcontrols {
 }
 
 .cc-brightness-icon {
-    color: #e0af68;
-    background: alpha(#e0af68, 0.09);
-    border-color: alpha(#e0af68, 0.1);
+    color: @warning_color;
+    background: alpha(@warning_bg_color, 0.09);
+    border-color: alpha(@warning_bg_color, 0.1);
 }
 
 .cc-scale {
@@ -510,10 +510,10 @@ headerbar windowcontrols {
 .session-card-power {
     background: linear-gradient(
         to bottom,
-        alpha(#e06c75, 0.045),
-        alpha(#e06c75, 0.02)
+        alpha(@destructive_bg_color, 0.045),
+        alpha(@destructive_bg_color, 0.02)
     );
-    border-color: alpha(#e06c75, 0.34);
+    border-color: alpha(@destructive_bg_color, 0.34);
     box-shadow:
         inset 0 1px 0 alpha(white, 0.04),
         0 2px 10px alpha(black, 0.16);
@@ -521,17 +521,17 @@ headerbar windowcontrols {
 
 .session-card-power .toggle-icon,
 .session-card-power .session-icon {
-    color: #e06c75;
+    color: @destructive_color;
     opacity: 0.95;
 }
 
 .session-card-power:hover {
     background: linear-gradient(
         to bottom,
-        alpha(#e06c75, 0.09),
-        alpha(#e06c75, 0.035)
+        alpha(@destructive_bg_color, 0.09),
+        alpha(@destructive_bg_color, 0.035)
     );
-    border-color: alpha(#e06c75, 0.48);
+    border-color: alpha(@destructive_bg_color, 0.48);
 }
 
 /* legacy class kept for other windows */

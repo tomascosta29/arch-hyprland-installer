@@ -26,11 +26,13 @@ install_costa_utils() {
     local bin_dir=$2
     local data_dir=$3
     local manifest_file=${4:-}
-    local src bin desktop icon_src
+    local src bin pkg_audit_bin desktop icon_src
 
-    if [[ -x "${repo_root}/costa-utils/bin/costa-utils" ]]; then
+    if [[ -x "${repo_root}/costa-utils/bin/costa-utils" &&
+        -x "${repo_root}/costa-utils/bin/pkg-audit" ]]; then
         src="${repo_root}/costa-utils"
         bin="${src}/bin/costa-utils"
+        pkg_audit_bin="${src}/bin/pkg-audit"
         desktop="${src}/assets/applications/org.fcosta.CostaUtils.desktop"
         icon_src="${src}/assets/icons/costa_utils.svg"
         [[ -f "${desktop}" && -f "${icon_src}" ]] || {
@@ -44,6 +46,7 @@ install_costa_utils() {
             return 1
         }
         bin="${src}/target/release/costa-utils"
+        pkg_audit_bin="${src}/target/release/pkg-audit"
         desktop="${src}/assets/applications/org.fcosta.CostaUtils.desktop"
         icon_src="${src}/assets/icons/costa_utils.svg"
 
@@ -56,17 +59,17 @@ install_costa_utils() {
             return 1
         }
 
-        if [[ ! -x "${bin}" ]]; then
+        if [[ ! -x "${bin}" || ! -x "${pkg_audit_bin}" ]]; then
             # shellcheck source=/dev/null
             source "${HOME}/.cargo/env" 2>/dev/null || true
             if ! command -v cargo >/dev/null 2>&1; then
                 printf 'Error: cargo is required to build costa-utils\n' >&2
                 return 1
             fi
-            cargo build --release --manifest-path "${src}/Cargo.toml"
+            cargo build --release --workspace --manifest-path "${src}/Cargo.toml"
         fi
-        [[ -x "${bin}" ]] || {
-            printf 'Error: release binary missing at %s\n' "${bin}" >&2
+        [[ -x "${bin}" && -x "${pkg_audit_bin}" ]] || {
+            printf 'Error: release binaries missing under %s/target/release\n' "${src}" >&2
             return 1
         }
     fi
@@ -79,6 +82,7 @@ install_costa_utils() {
         "${data_dir}/costa-utils/icons"
 
     install -Dm755 "${bin}" "${bin_dir}/costa-utils"
+    install -Dm755 "${pkg_audit_bin}" "${bin_dir}/pkg-audit"
     install -Dm644 "${desktop}" \
         "${data_dir}/applications/org.fcosta.CostaUtils.desktop"
     install -Dm644 "${icon_src}" \
@@ -96,6 +100,7 @@ install_costa_utils() {
             printf 'DATA\tapplications/org.fcosta.CostaUtils.desktop\n'
             printf 'DATA\ticons/hicolor/scalable/apps/org.fcosta.CostaUtils.svg\n'
             printf 'BIN\tcosta-utils\n'
+            printf 'BIN\tpkg-audit\n'
             while IFS= read -r -d '' icon; do
                 rel="${icon#"${src}/assets/icons/"}"
                 if [[ "${rel}" == hicolor/* ]]; then

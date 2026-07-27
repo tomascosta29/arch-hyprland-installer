@@ -123,14 +123,7 @@ impl BlinkerBackend {
             CaptureMode::Area => {
                 let slurp = Command::new("slurp")
                     .args([
-                        "-b",
-                        "21293699",
-                        "-c",
-                        "7FB0DEff",
-                        "-s",
-                        "7FB0DE0D",
-                        "-w",
-                        "2",
+                        "-b", "21293699", "-c", "7FB0DEff", "-s", "7FB0DE0D", "-w", "2",
                     ])
                     .stdout(Stdio::piped())
                     .stderr(Stdio::null())
@@ -196,7 +189,12 @@ impl BlinkerBackend {
             let _ = command::spawn(&[
                 "notify-send",
                 "Blinker",
-                &format!("Saved {}", path.file_name().and_then(|s| s.to_str()).unwrap_or("screenshot")),
+                &format!(
+                    "Saved {}",
+                    path.file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("screenshot")
+                ),
             ]);
         }
         Ok(path)
@@ -204,6 +202,70 @@ impl BlinkerBackend {
 
     pub fn copy_image(&self, path: &Path) -> Result<()> {
         copy_image_file(path)
+    }
+
+    pub fn capture_text(&self) -> Result<String> {
+        thread::sleep(Duration::from_millis(250));
+        let slurp = Command::new("slurp")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()?;
+        if !slurp.status.success() {
+            return Err(crate::Error::Message("Selection cancelled".into()));
+        }
+        let geometry = String::from_utf8_lossy(&slurp.stdout).trim().to_string();
+        let image = Command::new("grim")
+            .args(["-g", &geometry, "-"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()?;
+        if !image.status.success() {
+            return Err(crate::Error::Message("Could not capture selection".into()));
+        }
+
+        let languages = std::env::var("COSTA_OCR_LANGS").unwrap_or_else(|_| "eng".into());
+        let mut child = Command::new("tesseract")
+            .args([
+                "stdin", "stdout", "--oem", "1", "--psm", "6", "-l", &languages,
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|source| crate::Error::CommandSpawn {
+                argv: vec!["tesseract".into()],
+                source,
+            })?;
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(&image.stdout)?;
+        }
+        let output = child.wait_with_output()?;
+        if !output.status.success() {
+            return Err(crate::Error::Message("OCR failed".into()));
+        }
+        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if text.is_empty() {
+            return Err(crate::Error::Message("No text found in selection".into()));
+        }
+
+        let mut clipboard = Command::new("wl-copy")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|source| crate::Error::CommandSpawn {
+                argv: vec!["wl-copy".into()],
+                source,
+            })?;
+        if let Some(mut stdin) = clipboard.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(text.as_bytes())?;
+        }
+        if !clipboard.wait()?.success() {
+            return Err(crate::Error::Message("Could not copy OCR text".into()));
+        }
+        Ok(text)
     }
 }
 
@@ -259,10 +321,7 @@ fn format_timestamp(pattern: &str) -> String {
         .unwrap_or_default()
         .as_secs();
     // Prefer `date` for full patterns.
-    if let Ok(output) = Command::new("date")
-        .arg(format!("+{pattern}"))
-        .output()
-    {
+    if let Ok(output) = Command::new("date").arg(format!("+{pattern}")).output() {
         if output.status.success() {
             return String::from_utf8_lossy(&output.stdout).trim().to_string();
         }

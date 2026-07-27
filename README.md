@@ -55,7 +55,7 @@ The installer supports two distinct release flavors:
 
 | Flavor | Default Shell | Neovim Setup | Profile Characteristics |
 |---|---|---|---|
-| **Full** (default) | `zsh` with Starship and packaged plugins | Neovim with a pinned LazyVim starter | Full-featured, opinionated configuration |
+| **Full** (default) | `zsh` with Starship and packaged plugins | Repository-managed Neovim development environment | Full-featured, opinionated configuration |
 | **Light** | `bash` | Stock Neovim, no pre-installed configs | Minimal, less opinionated, unbloated |
 
 The light flavor omits Zsh, Starship, Zoxide, FZF, Eza, and the Zsh plugins
@@ -143,10 +143,12 @@ bare-metal profile.
 | `Super+V` | Clipboard history |
 | `Super+P` | Confirmed power menu |
 | `Super+L` | Lock session |
-| `Print` | Screenshot launcher |
+| `Print` | Capture the focused window |
+| `Super+Print` | Select and capture an area |
 | `Super+Alt+T` | Theme selector |
 | `Super+Alt+M` | Monitor selector |
 | `Super+Alt+K` | Keyboard and clock settings |
+| `Super+/` | Searchable keybinding guide |
 | `Super+Shift+M` | Exit Hyprland |
 
 Hyprland starts a user `hyprland-session.target`. Systemd then supervises
@@ -181,6 +183,22 @@ format is the only compositor configuration source. The dual profile targets:
 - `HDMI-A-1`: 2560×1440 at 144 Hz.
 
 Use `single` in a VM or when connector names do not match.
+
+Display hotplug recovery is runtime-only: if unplugging a monitor leaves
+Hyprland with no active output, the user service enables an automatic fallback
+without changing the selected monitor profile.
+
+Blinker's `F4` action recognizes text in a selected region with Tesseract and
+copies it to the clipboard. Set `COSTA_OCR_LANGS`, for example `eng+deu`, after
+installing the corresponding language data.
+
+`~/.config/scripts/costa-diagnose` reports Hyprland errors, managed user-service
+state, and recent Costa Utils/Quickshell journal entries. It does not inspect
+system packages or upload anything.
+
+After a successful switch, an executable personal hook at
+`~/.config/costa/hooks/theme-changed` receives the selected theme name. The hook
+is not repository-managed and is terminated after ten seconds.
 
 ## Validation
 
@@ -220,6 +238,33 @@ the host through QEMU Guest Agent:
 
 The same checks can be run inside an installed machine with
 `~/.config/scripts/validate-installed`.
+
+## Package and vulnerability audit
+
+`pkg-audit` is a compiled Rust CLI that compares explicitly installed packages
+with reviewed policy for official Arch, AUR/foreign, NPM, Cargo, pipx/uv, and
+Go tools. It reports both unmanaged and missing packages and exits
+unsuccessfully when collection fails or drift is found.
+
+```bash
+pkg-audit policy              # compare installed packages with policy
+pkg-audit policy --json       # stable machine-readable report
+pkg-audit vulns               # triage high/critical findings
+pkg-audit vulns --verbose     # every normalized finding
+pkg-audit vulns --component shfmt  # one component with remediation
+pkg-audit sbom                # Trivy-generated host CycloneDX SBOM
+```
+
+Arch CVEs come from `arch-audit` and the Arch Security Team feed. Trivy scans
+user-installed language artifacts and generates the SBOM from the real package
+databases; the repository does not synthesize package URLs itself. AUR/foreign
+packages are tracked for drift but are explicitly outside Arch advisory
+coverage.
+
+The package policy under `dotfiles/packages` is also the installer's package
+input. The expected Arch set is composed from `common.txt`, the selected
+hardware profile, and the selected full/light flavor, eliminating a second
+hand-maintained package list.
 
 ## Recovery
 
@@ -265,6 +310,7 @@ journalctl --user -b --no-pager
 - `dotfiles/systemd/user` — supervised graphical-session target and user units.
 - `dotfiles/themes` — complete theme bundles.
 - `dotfiles/quickshell` — Quickshell `costa` bar (replaces Waybar).
+- `dotfiles/packages` — canonical installer and `pkg-audit` package policy.
 - `costa-utils` — Rust GTK4/libadwaita desktop utility suite (overlays + CLI).
 - `tests` — unit and repository-invariant tests.
 - `INTERFACES.md` — stable contracts between desktop components (theme packs,

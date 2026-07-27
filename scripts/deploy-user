@@ -11,8 +11,9 @@ readonly STATE_DIR="${CONFIG_DIR}/costa"
 readonly MANIFEST_FILE="${STATE_DIR}/managed-files"
 readonly THEME="${1:-fcosta}"
 readonly RELOAD_DESKTOP="${COSTA_DEPLOY_RELOAD:-1}"
-readonly CONFIG_COMPONENTS=(dunst hypr kitty quickshell rofi scripts systemd themes)
+readonly CONFIG_COMPONENTS=(dunst hypr kitty nvim packages paru quickshell rofi scripts systemd themes)
 ACTIVE_MONITOR_PROFILE=""
+SHELL_CONFIG_ENABLED=0
 readonly RETIRED_CONFIG_FILES=(
     hypr/current_colors.conf
     hypr/hyprland.conf
@@ -49,6 +50,88 @@ append_tree_manifest() {
     done < <(find "${source_root}" \( -type f -o -type l \) -print0)
 }
 
+resolve_firefox_profile() {
+    local firefox_root=$1 profiles_ini="${firefox_root}/profiles.ini"
+    local relative
+
+    [[ -f "${profiles_ini}" ]] || return 1
+    relative="$(
+        awk -F= '
+            /^\[Install/ { in_install = 1; next }
+            /^\[/ { in_install = 0 }
+            in_install && $1 == "Default" { print $2; exit }
+        ' "${profiles_ini}"
+    )"
+    if [[ -z "${relative}" ]]; then
+        relative="$(
+            awk -F= '
+                function emit_default() {
+                    if (!emitted && in_profile && is_relative == "1" && is_default == "1" && path != "") {
+                        emitted = 1
+                        print path
+                    }
+                }
+                /^\[Profile/ {
+                    emit_default()
+                    if (emitted) {
+                        exit
+                    }
+                    in_profile = 1
+                    path = is_relative = is_default = ""
+                    next
+                }
+                /^\[/ {
+                    emit_default()
+                    if (emitted) {
+                        exit
+                    }
+                    in_profile = 0
+                    next
+                }
+                in_profile && $1 == "Path" { path = $2 }
+                in_profile && $1 == "IsRelative" { is_relative = $2 }
+                in_profile && $1 == "Default" { is_default = $2 }
+                END {
+                    if (!emitted) {
+                        emit_default()
+                    }
+                }
+            ' "${profiles_ini}"
+        )"
+    fi
+    [[ -n "${relative}" && "${relative}" != /* && "/${relative}/" != *"/../"* ]] ||
+        return 1
+    printf '%s\n' "${relative}"
+}
+
+deploy_firefox_profile() {
+    local firefox_root profile_relative profile_dir source relative
+
+    for firefox_root in \
+        "${CONFIG_DIR}/mozilla/firefox" "${HOME}/.mozilla/firefox"; do
+        profile_relative="$(resolve_firefox_profile "${firefox_root}" || true)"
+        [[ -n "${profile_relative}" ]] || continue
+        profile_dir="${firefox_root}/${profile_relative}"
+        mkdir -p "${profile_dir}"
+        cp -a "${REPOSITORY_ROOT}/dotfiles/firefox-profile/." "${profile_dir}/"
+
+        while IFS= read -r -d '' source; do
+            relative="${source#"${REPOSITORY_ROOT}/dotfiles/firefox-profile/"}"
+            if [[ "${firefox_root}" == "${CONFIG_DIR}/"* ]]; then
+                printf 'CONFIG\t%s/%s/%s\n' \
+                    "${firefox_root#"${CONFIG_DIR}/"}" "${profile_relative}" "${relative}" \
+                    >> "${NEW_MANIFEST}"
+            fi
+        done < <(
+            find "${REPOSITORY_ROOT}/dotfiles/firefox-profile" \
+                \( -type f -o -type l \) -print0
+        )
+        return 0
+    done
+
+    printf 'Warning: no Firefox profile found; skipped Firefox theme deployment.\n' >&2
+}
+
 remove_previous_manifest() {
     local kind relative root target
 
@@ -66,6 +149,7 @@ remove_previous_manifest() {
             CONFIG) root="${CONFIG_DIR}" ;;
             DATA) root="${DATA_DIR}" ;;
             BIN) root="${BIN_DIR}" ;;
+            HOME) root="${HOME}" ;;
             *) continue ;;
         esac
         target="${root}/${relative}"
@@ -109,6 +193,13 @@ for component in "${CONFIG_COMPONENTS[@]}"; do
     append_tree_manifest CONFIG \
         "${REPOSITORY_ROOT}/dotfiles/${component}" "${component}"
 done
+if command -v zsh >/dev/null 2>&1; then
+    SHELL_CONFIG_ENABLED=1
+    printf '%s\n' \
+        'HOME	.zshrc' \
+        'CONFIG	starship.toml' >> "${NEW_MANIFEST}"
+fi
+deploy_firefox_profile
 printf 'CONFIG\tmimeapps.list\n' >> "${NEW_MANIFEST}"
 # costa-utils binary + desktop/icons are recorded by install_costa_utils.
 printf '%s\n' \
@@ -151,10 +242,15 @@ install_costa_utils \
 
 ln -sfn "${CONFIG_DIR}/quickshell/costa/scripts/qs-activity" "${BIN_DIR}/qs-activity"
 cp -a "${REPOSITORY_ROOT}/dotfiles/mimeapps.list" "${CONFIG_DIR}/mimeapps.list"
+if [[ "${SHELL_CONFIG_ENABLED}" == 1 ]]; then
+    cp -a "${REPOSITORY_ROOT}/dotfiles/zshrc" "${HOME}/.zshrc"
+    cp -a "${REPOSITORY_ROOT}/dotfiles/starship/starship.toml" \
+        "${CONFIG_DIR}/starship.toml"
+fi
 
 find "${CONFIG_DIR}/scripts" -type f -exec chmod 0755 {} +
 find "${CONFIG_DIR}/quickshell/costa/scripts" -type f -exec chmod 0755 {} +
-chmod 0755 "${BIN_DIR}/costa-utils" "${BIN_DIR}/qs-activity"
+chmod 0755 "${BIN_DIR}/costa-utils" "${BIN_DIR}/pkg-audit" "${BIN_DIR}/qs-activity"
 chmod 0644 "${NEW_MANIFEST}"
 mv -f "${NEW_MANIFEST}" "${MANIFEST_FILE}"
 trap - EXIT

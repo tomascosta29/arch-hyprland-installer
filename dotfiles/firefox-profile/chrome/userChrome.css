@@ -1,0 +1,220 @@
+/* Costa Nightfox palette */
+:root {
+  --lwt-accent-color: #131a24 !important;
+  --lwt-text-color: #cdcecf !important;
+  --toolbar-bgcolor: #192330 !important;
+  --toolbar-color: #cdcecf !important;
+  --toolbar-field-background-color: #212e3f !important;
+  --toolbar-field-color: #cdcecf !important;
+  --toolbar-field-border-color: #39506d !important;
+  --toolbar-field-focus-background-color: #212e3f !important;
+  --toolbar-field-focus-color: #cdcecf !important;
+  --toolbar-field-focus-border-color: #719cd6 !important;
+  --tab-selected-bgcolor: #29394f !important;
+  --tab-selected-textcolor: #cdcecf !important;
+  --lwt-selected-tab-background-color: #29394f !important;
+  --button-bgcolor: #212e3f !important;
+  --button-hover-bgcolor: #29394f !important;
+  --button-active-bgcolor: #39506d !important;
+  --arrowpanel-background: #192330 !important;
+  --arrowpanel-color: #cdcecf !important;
+  --arrowpanel-border-color: #39506d !important;
+  --autocomplete-popup-background: #192330 !important;
+  --autocomplete-popup-color: #cdcecf !important;
+  --autocomplete-popup-highlight-background: #29394f !important;
+  --autocomplete-popup-highlight-color: #cdcecf !important;
+  --toolbox-background-color: #192330 !important;
+  --toolbox-background-color-inactive: #192330 !important;
+  --toolbar-background-color: #192330 !important;
+  --sidebar-background-color: #192330 !important;
+  --sidebar-text-color: #cdcecf !important;
+  --sidebar-border-color: #39506d !important;
+  --panel-background-color: #192330 !important;
+  --panel-text-color: #cdcecf !important;
+  --panel-border-color: #39506d !important;
+  --panel-separator-color: #39506d !important;
+  --menu-background-color: #192330 !important;
+  --menu-color: #cdcecf !important;
+  --menu-border-color: #39506d !important;
+  --background-color-canvas: #192330 !important;
+  --background-color-box: #212e3f !important;
+  --background-color-box-hover: #29394f !important;
+  --background-color-box-active: #39506d !important;
+  --background-color-overlay: #192330 !important;
+  --text-color: #cdcecf !important;
+  --text-color-deemphasized: #738091 !important;
+  --focus-outline-color: #719cd6 !important;
+  --urlbarview-background-color-hover: #29394f !important;
+  --urlbarview-background-color-selected: #39506d !important;
+  --urlbarview-separator-color: #39506d !important;
+  --urlbarview-text-color-action: #86abdc !important;
+  --urlbarview-text-color-selected: #cdcecf !important;
+  --panelui-subview-transition-duration: 0ms !important;
+  --tabpanel-background-color: #192330 !important;
+}
+
+#navigator-toolbox,
+#TabsToolbar,
+#nav-bar,
+#PersonalToolbar {
+  background-color: #192330 !important;
+  color: #cdcecf !important;
+}
+
+#navigator-toolbox {
+  border-bottom: 1px solid #39506d !important;
+}
+
+#browser,
+#tabbrowser-tabbox,
+#tabbrowser-tabpanels,
+.browserContainer,
+.browserStack,
+#sidebar-container,
+#sidebar-box,
+#sidebar,
+sidebar-main {
+  background: #192330 !important;
+  color: #cdcecf !important;
+}
+
+#sidebar-container,
+#sidebar-box,
+#sidebar-launcher-splitter,
+#sidebar-splitter {
+  border-color: #39506d !important;
+}
+
+sidebar-main {
+  --toolbarbutton-background-color-hover: #29394f !important;
+  --toolbarbutton-background-color-active: #39506d !important;
+  --button-background-color-hover: #29394f !important;
+  --button-background-color-active: #39506d !important;
+}
+
+.tabbrowser-tab .tab-background {
+  border-radius: 7px !important;
+}
+
+.tabbrowser-tab[selected] .tab-background {
+  background-color: #29394f !important;
+  box-shadow: inset 0 0 0 1px #39506d !important;
+}
+
+.tabbrowser-tab:hover:not([selected]) .tab-background {
+  background-color: #212e3f !important;
+}
+
+.urlbar-background,
+#searchbar {
+  background-color: #212e3f !important;
+  border-color: #39506d !important;
+}
+
+#urlbar[focused] > .urlbar-background {
+  border-color: #719cd6 !important;
+  box-shadow: 0 0 0 1px #719cd6 !important;
+}
+
+#urlbar[open] > .urlbar-background,
+#urlbar[breakout-extend] > .urlbar-background,
+#urlbar[breakout][breakout-extend] > .urlbar-background,
+#urlbar[focused] > .urlbar-background {
+  background-color: #212e3f !important;
+}
+
+#urlbar[open],
+#urlbar[breakout-extend],
+#urlbar[focused] {
+  --toolbar-field-background-color: #212e3f !important;
+  --toolbar-field-focus-background-color: #212e3f !important;
+  --toolbar-field-focus-border-color: #719cd6 !important;
+}
+
+.urlbarView,
+.urlbarView-body-inner,
+.urlbarView-results,
+#urlbar[open] > .urlbarView {
+  background-color: #192330 !important;
+  color: #cdcecf !important;
+}
+
+.urlbarView-row {
+  color: #cdcecf !important;
+}
+
+.urlbarView-row:hover,
+.urlbarView-row[selected] {
+  background-color: #29394f !important;
+  color: #cdcecf !important;
+}
+
+.urlbarView-url,
+.urlbarView-action,
+.urlbarView-row[dynamicType] .urlbarView-dynamic-action {
+  color: #86abdc !important;
+}
+
+.search-one-offs,
+.urlbarView-body-inner {
+  border-color: #39506d !important;
+}
+
+menupopup,
+panel,
+.panel-arrowcontent,
+panelmultiview,
+panelview,
+#appMenu-popup,
+#customizationui-widget-panel,
+#widget-overflow,
+#unified-extensions-panel {
+  --panel-background: #192330 !important;
+  --panel-color: #cdcecf !important;
+  --panel-border-color: #39506d !important;
+  --panel-background-color: #192330 !important;
+  --panel-text-color: #cdcecf !important;
+  background-color: #192330 !important;
+  color: #cdcecf !important;
+  border-color: #39506d !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+panel,
+panelmultiview,
+panelview,
+menupopup {
+  appearance: none !important;
+  -moz-default-appearance: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+menu[_moz-menuactive],
+menuitem[_moz-menuactive],
+.subviewbutton:hover,
+panelview .toolbarbutton-1:hover,
+.panel-subview-body toolbarbutton:hover {
+  background-color: #29394f !important;
+}
+
+menuseparator,
+toolbarseparator,
+.panel-subview-body > toolbarseparator {
+  border-color: #39506d !important;
+}
+
+tooltip {
+  --panel-background-color: #212e3f !important;
+  --panel-text-color: #cdcecf !important;
+  background-color: #212e3f !important;
+  color: #cdcecf !important;
+  border: 1px solid #39506d !important;
+}
+
+#statuspanel-label {
+  background-color: #192330 !important;
+  color: #cdcecf !important;
+  border-color: #39506d !important;
+}

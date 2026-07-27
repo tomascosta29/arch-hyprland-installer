@@ -1,0 +1,7 @@
+eza
+fzf
+starship
+zoxide
+zsh
+zsh-autosuggestions
+zsh-syntax-highlighting

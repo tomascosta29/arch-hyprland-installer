@@ -177,7 +177,8 @@ A layer rule blurs the `quickshell` namespace.
 | `Super+V` | `--clipper` |
 | `Super+P` | `--power-menu` |
 | `Super+R` / Super release | `--app-menu` |
-| `Print` | `--blinker` |
+| `Print` | `--blinker-window` |
+| `Super+Print` | `--blinker-area` |
 
 Window rule: class `^org\.fcosta\..*$` → float + center.
 
@@ -237,7 +238,22 @@ packs directly.
 |---|---|
 | `CONFIG` | `~/.config/{dunst,hypr,kitty,quickshell,rofi,scripts,systemd,themes}/` plus `mimeapps.list` |
 | `DATA` | desktop entry + icons under `~/.local/share/` (+ `costa-utils/icons/`) |
-| `BIN` | `~/.local/bin/costa-utils`, `~/.local/bin/qs-activity` |
+| `BIN` | `~/.local/bin/costa-utils`, `~/.local/bin/qs-activity`, `~/.local/bin/pkg-audit` |
+
+### pkg-audit contract
+
+`pkg-audit` is a Rust workspace binary. Package policy is composed from
+`~/.config/packages/common.txt`, the selected
+`profiles/<install-profile>.txt`, and `flavors/<install-flavor>.txt`;
+ecosystem-specific policy lives beside those files.
+
+Commands: `policy` (default), `vulns`, `sbom`. Human output is triage-first;
+`--json` emits the stable machine report. Exit codes are `0` clean/success,
+`1` drift or vulnerabilities, `2` partial result, `3` operational error.
+Collector failures in `policy` mark that ecosystem unknown and continue.
+`pkg-audit vulns` groups findings by actionability. `pkg-audit vulns
+--component <name>` expands one component with remediation; `--verbose` lists
+every normalized finding. No scan or selection state is persisted.
 
 Manifest: `~/.config/costa/managed-files` lines `KIND\trelative`. Deploy removes
 only previous managed entries, then recopies. Env: `COSTA_DEPLOY_RELOAD`.

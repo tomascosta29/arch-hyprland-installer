@@ -169,9 +169,9 @@ impl BluetoothWindow {
                         let inner = inner.clone();
                         move |err| {
                             inner.connecting.set(false);
-                            inner
-                                .toast
-                                .add_toast(adw::Toast::new(&format!("Bluetooth action failed: {err}")));
+                            inner.toast.add_toast(adw::Toast::new(&format!(
+                                "Bluetooth action failed: {err}"
+                            )));
                             reload(&inner);
                         }
                     },

@@ -38,7 +38,7 @@ fi
 if command -v luac >/dev/null 2>&1; then
     while IFS= read -r -d '' lua_file; do
         luac -p "${lua_file}"
-    done < <(find dotfiles/hypr dotfiles/themes -type f -name '*.lua' -print0)
+    done < <(find dotfiles/hypr dotfiles/nvim dotfiles/themes -type f -name '*.lua' -print0)
 else
     printf 'Warning: luac is unavailable; skipping Lua syntax validation.\n' >&2
 fi

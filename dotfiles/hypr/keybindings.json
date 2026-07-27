@@ -1,0 +1,23 @@
+[
+    {"key": "Super + Return / Q", "description": "Open Kitty"},
+    {"key": "Super + R", "description": "Open application launcher"},
+    {"key": "Super + E", "description": "Open Nautilus"},
+    {"key": "Super + B", "description": "Open Firefox"},
+    {"key": "Super + V", "description": "Open clipboard history"},
+    {"key": "Super + P", "description": "Open power menu"},
+    {"key": "Super + L", "description": "Lock session"},
+    {"key": "Super + /", "description": "Show this keybinding guide"},
+    {"key": "Print", "description": "Capture focused window"},
+    {"key": "Super + Print", "description": "Capture selected area"},
+    {"key": "Super + Alt + T", "description": "Select desktop theme"},
+    {"key": "Super + Alt + M", "description": "Select monitor layout"},
+    {"key": "Super + Alt + K", "description": "Keyboard and clock settings"},
+    {"key": "Super + C", "description": "Close focused window"},
+    {"key": "Super + F", "description": "Toggle fullscreen"},
+    {"key": "Super + Space", "description": "Toggle floating window"},
+    {"key": "Super + H/J/K/L or arrows", "description": "Move focus"},
+    {"key": "Super + Ctrl + H/J/K/L or arrows", "description": "Resize focused window"},
+    {"key": "Super + 0…9", "description": "Switch workspace"},
+    {"key": "Super + Shift + 0…9", "description": "Move window to workspace"},
+    {"key": "Super + Shift + M", "description": "Exit Hyprland"}
+]

@@ -1,0 +1,10 @@
+[Unit]
+Description=Recover a usable monitor after display hotplug
+PartOf=hyprland-session.target
+After=hyprland-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.config/scripts/monitor-reconcile
+Restart=on-failure
+RestartSec=2s

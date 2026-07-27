@@ -7,6 +7,7 @@ readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
 readonly THEMES_DIR="${CONFIG_DIR}/themes"
 readonly THEME_STATE_DIR="${CONFIG_DIR}/costa"
 readonly RELOAD_DESKTOP="${COSTA_THEME_RELOAD:-1}"
+readonly THEME_HOOK="${CONFIG_DIR}/costa/hooks/theme-changed"
 readonly REQUIRED_FILES=(
     colors.css
     colors.lua
@@ -196,6 +197,13 @@ if [[ "${RELOAD_DESKTOP}" == 1 ]] &&
     [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
     notify-send -i preferences-desktop-theme \
         "Theme Engine" "Applied '${THEME}' to the desktop." || true
+fi
+
+# Optional personal customization point. Deployment never owns this file.
+if [[ -x "${THEME_HOOK}" ]]; then
+    if ! timeout 10 "${THEME_HOOK}" "${THEME}"; then
+        printf "Warning: theme hook '%s' failed or timed out.\n" "${THEME_HOOK}" >&2
+    fi
 fi
 
 printf "Theme '%s' applied successfully.\n" "${THEME}"

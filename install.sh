@@ -9,8 +9,7 @@ readonly YELLOW='\033[1;33m'
 readonly RED='\033[0;31m'
 readonly NC='\033[0m'
 readonly MIN_DISK_BYTES=$((20 * 1024 * 1024 * 1024))
-readonly LAZYVIM_STARTER_COMMIT=803bc181d7c0d6d5eeba9274d9be49b287294d99
-
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_MOUNTED=false
 INSTALL_FLAVOR="full"
 
@@ -262,51 +261,37 @@ mount "${PART_ROOT}" /mnt
 TARGET_MOUNTED=true
 mount --mkdir "${PART_EFI}" /mnt/boot
 
-COMMON_PACKAGES=(
-    base linux linux-firmware sudo neovim git openssh
-    grub efibootmgr os-prober dosfstools
-    networkmanager firewalld
-    pipewire pipewire-audio pipewire-pulse pipewire-alsa wireplumber
-    pavucontrol playerctl sound-theme-freedesktop
-    mesa mesa-utils vulkan-tools libva-utils
-    hyprland hyprpaper hyprlock hypridle hyprsunset hyprshutdown hyprpolkitagent
-    quickshell kitty rofi dunst
-    xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
-    xdg-utils xdg-user-dirs
-    sddm nautilus gvfs gvfs-mtp udisks2 gnome-keyring
-    desktop-file-utils file-roller
-    firefox
-    gtk4 libadwaita
-    upower cliphist
-    grim slurp wl-clipboard libnotify
-    pacman-contrib htop lm_sensors man-db man-pages
-    jq curl libpulse python zram-generator
-    ttf-jetbrains-mono-nerd otf-font-awesome
-    noto-fonts noto-fonts-emoji noto-fonts-cjk papirus-icon-theme
+read_package_policy() {
+    sed -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' "$1"
+}
+
+mapfile -t COMMON_PACKAGES < <(
+    read_package_policy "${SCRIPT_DIR}/dotfiles/packages/common.txt"
 )
 
 case "${INSTALL_PROFILE}" in
     bare-metal)
-        PROFILE_PACKAGES=(
-            amd-ucode vulkan-radeon
-            fwupd smartmontools nvme-cli ntfs-3g
-            bluez bluez-utils brightnessctl
+        mapfile -t PROFILE_PACKAGES < <(
+            read_package_policy "${SCRIPT_DIR}/dotfiles/packages/profiles/bare-metal.txt"
         )
         ;;
     vm)
-        PROFILE_PACKAGES=(qemu-guest-agent spice-vdagent)
+        mapfile -t PROFILE_PACKAGES < <(
+            read_package_policy "${SCRIPT_DIR}/dotfiles/packages/profiles/vm.txt"
+        )
         ;;
 esac
 
 case "${INSTALL_FLAVOR}" in
     full)
-        FLAVOR_PACKAGES=(
-            zsh starship zoxide fzf
-            zsh-autosuggestions zsh-syntax-highlighting eza
+        mapfile -t FLAVOR_PACKAGES < <(
+            read_package_policy "${SCRIPT_DIR}/dotfiles/packages/flavors/full.txt"
         )
         ;;
     light)
-        FLAVOR_PACKAGES=()
+        mapfile -t FLAVOR_PACKAGES < <(
+            read_package_policy "${SCRIPT_DIR}/dotfiles/packages/flavors/light.txt"
+        )
         ;;
 esac
 
@@ -417,7 +402,6 @@ CHROOT
 printf '%s:%s\n' "${USERNAME}" "${USER_PASS}" | arch-chroot /mnt chpasswd
 unset USER_PASS
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -d "${SCRIPT_DIR}/dotfiles" ]] ||
     die "The repository's dotfiles directory is missing."
 
@@ -431,7 +415,8 @@ while IFS= read -r -d '' dotfile_entry; do
     cp -a "${dotfile_entry}" "${USER_HOME}/.config/"
 done < <(
     find "${SCRIPT_DIR}/dotfiles" -mindepth 1 -maxdepth 1 \
-        ! -name sddm ! -name mimeapps.list ! -name zshrc ! -name starship -print0
+        ! -name firefox-profile ! -name nvim ! -name sddm \
+        ! -name mimeapps.list ! -name zshrc ! -name starship -print0
 )
 
 ln -sfn "${USER_HOME}/.config/quickshell/costa/scripts/qs-activity" \
@@ -440,7 +425,7 @@ mkdir -p "${USER_HOME}/.config"
 cp -a "${SCRIPT_DIR}/dotfiles/mimeapps.list" "${USER_HOME}/.config/mimeapps.list"
 
 if [[ "${INSTALL_FLAVOR}" == "full" ]]; then
-    log "Configuring Zsh, Starship, packaged plugins, and LazyVim..."
+    log "Configuring Zsh, Starship, packaged plugins, and Neovim..."
 
     # Deploy custom zshrc if available
     if [[ -f "${SCRIPT_DIR}/dotfiles/zshrc" ]]; then
@@ -448,22 +433,27 @@ if [[ "${INSTALL_FLAVOR}" == "full" ]]; then
     fi
     cp "${SCRIPT_DIR}/dotfiles/starship/starship.toml" \
         "${USER_HOME}/.config/starship.toml"
-
-    # Fetch an immutable LazyVim starter revision for reproducible installs.
-    if git init --quiet "${USER_HOME}/.config/nvim" &&
-        git -C "${USER_HOME}/.config/nvim" remote add origin \
-            https://github.com/LazyVim/starter.git &&
-        git -C "${USER_HOME}/.config/nvim" fetch --quiet --depth=1 \
-            origin "${LAZYVIM_STARTER_COMMIT}" &&
-        git -C "${USER_HOME}/.config/nvim" checkout --quiet --detach FETCH_HEAD; then
-        :
-    else
-        warn "Could not install the pinned LazyVim starter."
-    fi
-    if [[ -d "${USER_HOME}/.config/nvim" ]]; then
-        rm -rf "${USER_HOME}/.config/nvim/.git"
-    fi
+    cp -a "${SCRIPT_DIR}/dotfiles/nvim" "${USER_HOME}/.config/nvim"
 fi
+
+# Seed a deterministic Firefox profile so the repository theme is active on
+# first launch. Firefox will add its installation-specific section as needed.
+FIREFOX_ROOT="${USER_HOME}/.config/mozilla/firefox"
+FIREFOX_PROFILE="costa.default-release"
+mkdir -p "${FIREFOX_ROOT}/${FIREFOX_PROFILE}"
+cp -a "${SCRIPT_DIR}/dotfiles/firefox-profile/." \
+    "${FIREFOX_ROOT}/${FIREFOX_PROFILE}/"
+cat > "${FIREFOX_ROOT}/profiles.ini" <<EOF
+[Profile0]
+Name=default-release
+IsRelative=1
+Path=${FIREFOX_PROFILE}
+Default=1
+
+[General]
+StartWithLastProfile=1
+Version=2
+EOF
 
 # Seed the same ownership manifest consumed by scripts/deploy-user. A later
 # deployment can therefore remove files retired after the initial installation
@@ -472,7 +462,11 @@ MANIFEST_DIR="${USER_HOME}/.config/costa"
 MANIFEST_FILE="${MANIFEST_DIR}/managed-files"
 mkdir -p "${MANIFEST_DIR}"
 : > "${MANIFEST_FILE}"
-for component in dunst hypr kitty quickshell rofi scripts systemd themes; do
+MANAGED_COMPONENTS=(dunst hypr kitty packages quickshell rofi scripts systemd themes)
+if [[ "${INSTALL_FLAVOR}" == "full" ]]; then
+    MANAGED_COMPONENTS+=(nvim)
+fi
+for component in "${MANAGED_COMPONENTS[@]}"; do
     source_root="${SCRIPT_DIR}/dotfiles/${component}"
     while IFS= read -r -d '' source; do
         relative="${source#"${source_root}/"}"
@@ -480,7 +474,15 @@ for component in dunst hypr kitty quickshell rofi scripts systemd themes; do
         printf 'CONFIG\t%s/%s\n' "${component}" "${relative}" >> "${MANIFEST_FILE}"
     done < <(find "${source_root}" \( -type f -o -type l \) -print0)
 done
+while IFS= read -r -d '' source; do
+    relative="${source#"${SCRIPT_DIR}/dotfiles/firefox-profile/"}"
+    printf 'CONFIG\tmozilla/firefox/%s/%s\n' \
+        "${FIREFOX_PROFILE}" "${relative}" >> "${MANIFEST_FILE}"
+done < <(
+    find "${SCRIPT_DIR}/dotfiles/firefox-profile" \( -type f -o -type l \) -print0
+)
 printf 'CONFIG\tmimeapps.list\n' >> "${MANIFEST_FILE}"
+printf '%s\n' "${INSTALL_FLAVOR}" > "${MANIFEST_DIR}/install-flavor"
 
 # Build costa-utils on the live installer (needs cargo + GTK devel headers)
 # if a pre-compiled binary is not present, then install the binary and desktop assets.

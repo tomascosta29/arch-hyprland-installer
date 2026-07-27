@@ -51,7 +51,7 @@ Item {
                 rightMargin: Colors.pillRadius
             }
             height: 1
-            color: Qt.rgba(0.847, 0.871, 0.914, 0.07)
+            color: Qt.rgba(Colors.foreground.r, Colors.foreground.g, Colors.foreground.b, 0.07)
         }
 
         Row {

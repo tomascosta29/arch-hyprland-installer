@@ -11,6 +11,7 @@ pub enum Target {
     Runner,
     Blinker,
     BlinkerArea,
+    BlinkerWindow,
     BlinkerManager,
     Clipper,
     PowerMenu,
@@ -18,6 +19,7 @@ pub enum Target {
     BluetoothMenu,
     VolumeMenu,
     MonitorMenu,
+    Keybindings,
     ControlCenter,
     Shutdown,
 }
@@ -31,6 +33,7 @@ impl Target {
             Self::Runner => "--runner",
             Self::Blinker => "--blinker",
             Self::BlinkerArea => "--blinker-area",
+            Self::BlinkerWindow => "--blinker-window",
             Self::BlinkerManager => "--blinker-manager",
             Self::Clipper => "--clipper",
             Self::PowerMenu => "--power-menu",
@@ -38,6 +41,7 @@ impl Target {
             Self::BluetoothMenu => "--bluetooth-menu",
             Self::VolumeMenu => "--volume-menu",
             Self::MonitorMenu => "--monitor-menu",
+            Self::Keybindings => "--keybindings",
             Self::ControlCenter => "--control-center",
             Self::Shutdown => "--shutdown",
         }
@@ -50,6 +54,7 @@ impl Target {
             Self::Runner,
             Self::Blinker,
             Self::BlinkerArea,
+            Self::BlinkerWindow,
             Self::BlinkerManager,
             Self::Clipper,
             Self::PowerMenu,
@@ -57,6 +62,7 @@ impl Target {
             Self::BluetoothMenu,
             Self::VolumeMenu,
             Self::MonitorMenu,
+            Self::Keybindings,
             Self::ControlCenter,
             Self::Shutdown,
         ]
@@ -76,6 +82,7 @@ impl Target {
             "--runner" | "runner" => Self::Runner,
             "--blinker" | "blinker" => Self::Blinker,
             "--blinker-area" | "blinker-area" | "blinker_area" => Self::BlinkerArea,
+            "--blinker-window" | "blinker-window" | "blinker_window" => Self::BlinkerWindow,
             "--blinker-manager" | "blinker-manager" | "blinker_manager" => Self::BlinkerManager,
             "--clipper" | "clipper" => Self::Clipper,
             "--power-menu" | "power-menu" | "power_menu" | "power" => Self::PowerMenu,
@@ -87,6 +94,7 @@ impl Target {
             "--monitor-menu" | "monitor-menu" | "monitor_menu" | "monitor" | "monitors" => {
                 Self::MonitorMenu
             }
+            "--keybindings" | "keybindings" | "keys" => Self::Keybindings,
             "--control-center" | "control-center" | "control_center" | "control" => {
                 Self::ControlCenter
             }
@@ -106,7 +114,7 @@ impl Target {
     }
 }
 
-pub const USAGE: &str = "Usage: costa-utils [--daemon | --app-menu | --runner | --blinker | --blinker-area | --blinker-manager | --clipper | --power-menu | --network-menu | --bluetooth-menu | --volume-menu | --monitor-menu | --control-center | --shutdown]";
+pub const USAGE: &str = "Usage: costa-utils [--daemon | --app-menu | --runner | --blinker | --blinker-area | --blinker-window | --blinker-manager | --clipper | --power-menu | --network-menu | --bluetooth-menu | --volume-menu | --monitor-menu | --keybindings | --control-center | --shutdown]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CliMode {
@@ -142,6 +150,10 @@ mod tests {
         assert_eq!(Target::parse("--daemon").unwrap(), Target::Daemon);
         assert_eq!(Target::parse("power").unwrap(), Target::PowerMenu);
         assert_eq!(Target::parse("appmenu").unwrap(), Target::AppMenu);
+        assert_eq!(
+            Target::parse("--blinker-window").unwrap(),
+            Target::BlinkerWindow
+        );
         assert!(Target::parse("nope").is_err());
     }
 

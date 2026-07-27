@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Recover a usable output after hotplug without changing the selected profile.
+
+set -Eeuo pipefail
+readonly SOCKET="${XDG_RUNTIME_DIR}/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
+
+reconcile() {
+    local active
+    active="$(hyprctl -j monitors 2>/dev/null | jq 'length' 2>/dev/null || printf '0')"
+    if [[ "${active}" == 0 ]]; then
+        hyprctl keyword monitor ',preferred,auto,1' >/dev/null 2>&1 || true
+    fi
+}
+
+[[ -S "${SOCKET}" ]] || exit 0
+reconcile
+socat -U - "UNIX-CONNECT:${SOCKET}" |
+    while IFS= read -r event; do
+        case "${event}" in
+            monitoradded\>\>* | monitoraddedv2\>\>* | monitorremoved\>\>* | monitorremovedv2\>\>*)
+                sleep 1
+                reconcile
+                ;;
+        esac
+    done

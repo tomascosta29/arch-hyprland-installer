@@ -1,0 +1,209 @@
+/* Theme only Firefox-owned surfaces; normal websites are unaffected. */
+@-moz-document url-prefix("about:home"),
+  url-prefix("about:newtab"),
+  url-prefix("about:welcome") {
+  :root {
+    --newtab-background-color: #192330 !important;
+    --newtab-background-color-secondary: #212e3f !important;
+    --newtab-text-primary-color: #cdcecf !important;
+    --newtab-text-secondary-color: #738091 !important;
+    --newtab-primary-action-background: #719cd6 !important;
+    --newtab-primary-element-background-color: #719cd6 !important;
+    --newtab-primary-element-hover-color: #86abdc !important;
+    --newtab-border-color: #39506d !important;
+    --newtab-element-hover-color: #29394f !important;
+    --newtab-element-active-color: #39506d !important;
+    --newtab-button-background: #212e3f !important;
+    --newtab-card-background-color: #212e3f !important;
+    --newtab-context-menu-background-color: #192330 !important;
+    --newtab-weather-background-color: #212e3f !important;
+    --newtab-button-static-background: #212e3f !important;
+    --newtab-button-static-focus-background: #29394f !important;
+    --newtab-button-static-hover-background: #29394f !important;
+    --newtab-button-static-active-background: #39506d !important;
+    --background-color-ghost: #212e3f !important;
+    --button-background-color-ghost-hover: #29394f !important;
+    --button-background-color-ghost-active: #39506d !important;
+  }
+
+  :root[lwt-newtab-brighttext],
+  .lightWallpaper,
+  .darkWallpaper {
+    --newtab-background-color: #192330 !important;
+    --newtab-background-color-secondary: #212e3f !important;
+    --newtab-weather-background-color: #212e3f !important;
+    --newtab-button-static-background: #212e3f !important;
+    --newtab-button-static-focus-background: #29394f !important;
+    --newtab-button-static-hover-background: #29394f !important;
+    --newtab-button-static-active-background: #39506d !important;
+    --background-color-ghost: #212e3f !important;
+  }
+
+  body,
+  .activity-stream,
+  .outer-wrapper,
+  .search-wrapper .search-handoff-button,
+  .search-wrapper input {
+    background-color: #192330 !important;
+    color: #cdcecf !important;
+  }
+
+  .search-wrapper .search-handoff-button,
+  .search-wrapper input,
+  .top-site-outer .tile,
+  .card-outer {
+    background-color: #212e3f !important;
+    border-color: #39506d !important;
+  }
+
+  .search-wrapper content-search-handoff-ui,
+  .search-wrapper content-search-handoff-ui[fakefocus] {
+    --content-search-handoff-ui-background-color: #212e3f !important;
+    --content-search-handoff-ui-color: #cdcecf !important;
+    --content-search-handoff-ui-fill: #738091 !important;
+    --content-search-handoff-ui-caret-color: #cdcecf !important;
+    --content-search-handoff-ui-fakefocus-border-color: #719cd6 !important;
+    --content-search-handoff-ui-fakefocus-box-shadow-inner: color-mix(
+      in srgb,
+      #719cd6 25%,
+      transparent
+    ) !important;
+    --content-search-handoff-ui-fakefocus-box-shadow-outer: transparent !important;
+  }
+
+  .weatherCard,
+  .weatherInfoLink,
+  .weatherButtonContextMenuWrapper,
+  .weatherNotAvailable {
+    background-color: #212e3f !important;
+    color: #cdcecf !important;
+  }
+
+  :is(.lightWallpaper, .darkWallpaper) .weatherCard,
+  :is(.lightWallpaper, .darkWallpaper) .weatherInfoLink,
+  :is(.lightWallpaper, .darkWallpaper) .weatherButtonContextMenuWrapper,
+  :is(.lightWallpaper, .darkWallpaper) .weatherNotAvailable {
+    background: #212e3f !important;
+  }
+
+  .weatherCard:hover,
+  .weatherInfoLink:hover,
+  .weatherButtonContextMenuWrapper:hover {
+    background-color: #29394f !important;
+  }
+
+  .weatherButtonContextMenuWrapper::after {
+    background-color: #39506d !important;
+  }
+
+  .customize-menu,
+  .customize-menu.nova-enabled {
+    --customize-menu-bg: #192330 !important;
+    background: #192330 !important;
+    color: #cdcecf !important;
+    transition: none !important;
+    animation: none !important;
+  }
+
+  .top-site-outer:hover,
+  .top-site-outer:focus,
+  .card-outer:hover {
+    background-color: #29394f !important;
+  }
+}
+
+@-moz-document url-prefix("about:preferences"),
+  url-prefix("about:addons"),
+  url-prefix("about:logins"),
+  url-prefix("about:downloads"),
+  url-prefix("about:protections"),
+  url-prefix("about:privatebrowsing"),
+  url-prefix("about:config"),
+  url-prefix("about:profiles"),
+  url-prefix("about:support"),
+  url-prefix("about:policies"),
+  url-prefix("about:processes"),
+  url-prefix("about:sessionrestore"),
+  url-prefix("about:tabcrashed"),
+  url-prefix("about:neterror"),
+  url-prefix("about:certerror"),
+  url-prefix("about:blocked"),
+  url-prefix("about:restartrequired") {
+  :root {
+    color-scheme: dark !important;
+    --in-content-page-background: #192330 !important;
+    --in-content-page-color: #cdcecf !important;
+    --in-content-box-background: #212e3f !important;
+    --in-content-box-background-odd: #192330 !important;
+    --in-content-box-info-background: #212e3f !important;
+    --in-content-box-border-color: #39506d !important;
+    --in-content-border-color: #39506d !important;
+    --in-content-button-background: #212e3f !important;
+    --in-content-button-background-hover: #29394f !important;
+    --in-content-button-background-active: #39506d !important;
+    --in-content-primary-button-background: #719cd6 !important;
+    --in-content-primary-button-background-hover: #86abdc !important;
+    --in-content-primary-button-text-color: #192330 !important;
+    --in-content-accent-color: #719cd6 !important;
+    --in-content-accent-color-active: #86abdc !important;
+    --in-content-link-color: #86abdc !important;
+    --in-content-link-color-hover: #63cdcf !important;
+    --in-content-item-hover: #29394f !important;
+    --in-content-item-selected: #39506d !important;
+    --in-content-focus-outline-color: #719cd6 !important;
+    --background-color-canvas: #192330 !important;
+    --background-color-box: #212e3f !important;
+    --background-color-box-hover: #29394f !important;
+    --background-color-box-active: #39506d !important;
+    --background-color-overlay: #192330 !important;
+    --border-color: #39506d !important;
+    --text-color: #cdcecf !important;
+    --text-color-deemphasized: #738091 !important;
+    --link-color: #86abdc !important;
+    --focus-outline-color: #719cd6 !important;
+    accent-color: #719cd6 !important;
+  }
+
+  html,
+  body,
+  main,
+  .main-content,
+  .main-content-container,
+  #main,
+  #content,
+  #preferences-body,
+  #categories {
+    background-color: #192330 !important;
+    color: #cdcecf !important;
+  }
+
+  input,
+  textarea,
+  select,
+  search-textbox,
+  .search-container,
+  .card,
+  .addon,
+  .category {
+    background-color: #212e3f !important;
+    color: #cdcecf !important;
+    border-color: #39506d !important;
+  }
+
+  moz-card {
+    --card-background-color: transparent !important;
+    --card-border: none !important;
+    --card-box-shadow: none !important;
+    --card-padding-inline: 0px !important;
+    --card-padding-block: 0px !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .category[selected],
+  .category:hover,
+  tr:hover {
+    background-color: #29394f !important;
+  }
+}

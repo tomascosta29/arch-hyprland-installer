@@ -21,6 +21,7 @@ setopt HIST_IGNORE_ALL_DUPS    # Delete old duplicate entry if new entry is dupl
 setopt HIST_IGNORE_SPACE       # Don't record commands starting with a space
 setopt HIST_SAVE_NO_DUPS       # Don't write duplicate entries in history file
 setopt HIST_REDUCE_BLANKS      # Remove unnecessary blanks from history
+setopt HIST_FIND_NO_DUPS       # Do not display duplicates when searching history
 setopt AUTO_CD                 # If command is a directory name, cd to it
 setopt AUTO_PUSHD              # Make cd push old directory to stack
 setopt PUSHD_IGNORE_DUPS       # Don't push duplicate directories to stack
@@ -28,15 +29,25 @@ setopt INTERACTIVE_COMMENTS    # Allow inline comments in interactive shell
 
 # -- Completion System ---------------------------------------------------------
 autoload -Uz compinit
-compinit -d "${XDG_CACHE_HOME:-$HOME/.cache}/zcompdump-$ZSH_VERSION"
+ZCOMPDUMP_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
+mkdir -p "$ZCOMPDUMP_DIR"
+ZCOMPDUMP_FILE="$ZCOMPDUMP_DIR/zcompdump-$ZSH_VERSION"
 
-# Completion colors: cyan for directories (di=36), magenta for symlinks, etc.
+# Fast compinit: only re-check once every 24 hours
+if [[ -s "$ZCOMPDUMP_FILE" && $(find "$ZCOMPDUMP_FILE" -mtime -1 2>/dev/null) ]]; then
+    compinit -C -d "$ZCOMPDUMP_FILE"
+else
+    compinit -d "$ZCOMPDUMP_FILE"
+fi
+
+# Completion Styling & Case-Insensitivity
 if [[ -z "$LS_COLORS" ]] && command -v dircolors >/dev/null 2>&1; then
     eval "$(dircolors -b)"
 fi
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS:-di=36:ln=35:so=32:pi=33:ex=31}"
 zstyle ':completion:*' use-cache on
-zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
+zstyle ':completion:*' cache-path "$ZCOMPDUMP_DIR"
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' # Case insensitive tab completion
 
 # -- Keybindings ---------------------------------------------------------------
 bindkey -e  # Emacs keybindings
@@ -48,6 +59,13 @@ bindkey '^[[3~' delete-char            # Delete key
 bindkey '^[[1;5C' forward-word         # Ctrl + Right
 bindkey '^[[1;5D' backward-word        # Ctrl + Left
 bindkey '^?' backward-delete-char      # Backspace
+
+# History search with Up/Down arrows
+autoload -Uz up-line-or-beginning-search down-line-or-beginning-search
+zle -N up-line-or-beginning-search
+zle -N down-line-or-beginning-search
+bindkey '^[[A' up-line-or-beginning-search       # Up arrow
+bindkey '^[[B' down-line-or-beginning-search     # Down arrow
 
 # -- Aliases & Utility Overrides -----------------------------------------------
 if command -v eza >/dev/null 2>&1; then
@@ -61,18 +79,40 @@ else
     alias la='ls -A --color=auto --group-directories-first'
 fi
 
+# Navigation & Open shortcuts
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+alias open='~/.local/bin/open'
+
+# Git shortcuts
 alias g='git'
 alias gs='git status'
 alias gd='git diff'
 alias gl='git log --oneline --graph --decorate'
 
 # -- Tool Integrations ---------------------------------------------------------
-# FZF Integration
-if [[ -f /usr/share/fzf/key-bindings.zsh ]]; then
+# FZF Integration (Modern native loader)
+if command -v fzf >/dev/null 2>&1; then
+    # Exclude noise directories (.cargo, .cache, .local, node_modules, target, .git)
+    if command -v fd >/dev/null 2>&1; then
+        export FZF_DEFAULT_COMMAND='fd --type f --strip-cwd-prefix --hidden --exclude .git --exclude .cache --exclude .cargo --exclude .local --exclude node_modules --exclude target'
+        export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+        export FZF_ALT_C_COMMAND='fd --type d --strip-cwd-prefix --hidden --exclude .git --exclude .cache --exclude .cargo --exclude .local --exclude node_modules --exclude target'
+    elif command -v rg >/dev/null 2>&1; then
+        export FZF_DEFAULT_COMMAND='rg --files --hidden --glob "!.git/*" --glob "!.cache/*" --glob "!.cargo/*" --glob "!.local/*" --glob "!node_modules/*" --glob "!target/*"'
+        export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+        export FZF_ALT_C_COMMAND='find . \( -path "*/.*" -o -path "*/node_modules" -o -path "*/target" \) -prune -o -type d -print'
+    else
+        export FZF_DEFAULT_COMMAND='find . \( -path "*/.*" -o -path "*/node_modules" -o -path "*/target" \) -prune -o -type f -print -o -type l -print'
+        export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+        export FZF_ALT_C_COMMAND='find . \( -path "*/.*" -o -path "*/node_modules" -o -path "*/target" \) -prune -o -type d -print'
+    fi
+
+    eval "$(fzf --zsh)"
+elif [[ -f /usr/share/fzf/key-bindings.zsh ]]; then
     source /usr/share/fzf/key-bindings.zsh
-fi
-if [[ -f /usr/share/fzf/completion.zsh ]]; then
-    source /usr/share/fzf/completion.zsh
+    [[ -f /usr/share/fzf/completion.zsh ]] && source /usr/share/fzf/completion.zsh
 fi
 
 # Zoxide (smart cd replacement)

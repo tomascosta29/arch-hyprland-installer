@@ -1,0 +1,3 @@
+# Foreign packages intentionally installed on the reference workstation.
+paru
+paru-debug

@@ -199,11 +199,9 @@ fn make_screenshot_card(
     let backend_c = backend.clone();
     let path_c = path.to_path_buf();
     let toast_c = toast.clone();
-    copy.connect_clicked(move |_| {
-        match backend_c.copy_image(&path_c) {
-            Ok(()) => toast_c.add_toast(adw::Toast::new("Copied to clipboard")),
-            Err(err) => toast_c.add_toast(adw::Toast::new(&format!("Copy failed: {err}"))),
-        }
+    copy.connect_clicked(move |_| match backend_c.copy_image(&path_c) {
+        Ok(()) => toast_c.add_toast(adw::Toast::new("Copied to clipboard")),
+        Err(err) => toast_c.add_toast(adw::Toast::new(&format!("Copy failed: {err}"))),
     });
     footer.append(&copy);
 

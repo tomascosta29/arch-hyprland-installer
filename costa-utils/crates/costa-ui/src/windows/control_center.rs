@@ -194,18 +194,8 @@ impl ControlCenterWindow {
         let session = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
         session.add_css_class("cc-session");
         main.append(&session);
-        let lock = make_session_card(
-            "system-lock-screen-symbolic",
-            "Lock",
-            "Lock Screen",
-            false,
-        );
-        let power_menu = make_session_card(
-            "system-shutdown-symbolic",
-            "Power",
-            "Power Menu",
-            true,
-        );
+        let lock = make_session_card("system-lock-screen-symbolic", "Lock", "Lock Screen", false);
+        let power_menu = make_session_card("system-shutdown-symbolic", "Power", "Power Menu", true);
         session.append(&lock);
         session.append(&power_menu);
 
@@ -523,7 +513,9 @@ fn refresh(inner: &Rc<Inner>) {
             let dnd = command::run(&["dunstctl", "is-paused"], false)
                 .map(|r| r.stdout.trim() == "true")
                 .unwrap_or(false);
-            let wifi = network.active_status().unwrap_or((false, "Unavailable".into()));
+            let wifi = network
+                .active_status()
+                .unwrap_or((false, "Unavailable".into()));
             let bt = bluetooth.query().ok();
             let nl = nightlight.query().unwrap_or(false);
             Ok((vol, bright, dnd, wifi, bt, nl))
@@ -549,16 +541,8 @@ fn refresh(inner: &Rc<Inner>) {
                 };
                 set_toggle(&inner_c.bt, state.powered, &subtitle);
             }
-            set_toggle(
-                &inner_c.nl,
-                nl,
-                if nl { "On" } else { "Off" },
-            );
-            set_toggle(
-                &inner_c.dnd,
-                dnd,
-                if dnd { "On" } else { "Off" },
-            );
+            set_toggle(&inner_c.nl, nl, if nl { "On" } else { "Off" });
+            set_toggle(&inner_c.dnd, dnd, if dnd { "On" } else { "Off" });
         },
         {
             let inner = inner.clone();

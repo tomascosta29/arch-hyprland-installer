@@ -1,0 +1,6 @@
+@esbuild/linux-x64
+esbuild
+node-gyp
+nopt
+semver
+wrangler

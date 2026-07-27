@@ -193,7 +193,9 @@ impl NetworkWindow {
                     },
                     {
                         let state = state.clone();
-                        move |err| show_toast(&state, &format!("Saved connections unavailable: {err}"))
+                        move |err| {
+                            show_toast(&state, &format!("Saved connections unavailable: {err}"))
+                        }
                     },
                 );
             });

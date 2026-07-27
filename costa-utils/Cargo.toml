@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/costa-bin",
     "crates/costa-core",
+    "crates/pkg-audit",
     "crates/costa-ui",
 ]
 default-members = ["crates/costa-bin"]

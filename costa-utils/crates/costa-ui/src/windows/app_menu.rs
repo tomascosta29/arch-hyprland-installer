@@ -274,7 +274,9 @@ impl AppMenuWindow {
                         if let Some(list) = &inner.history_list {
                             if let Some(row) = list.selected_row() {
                                 let index = row.index() as usize;
-                                if let Some(cmd) = inner.filtered_history.borrow().get(index).cloned() {
+                                if let Some(cmd) =
+                                    inner.filtered_history.borrow().get(index).cloned()
+                                {
                                     run_command_line(&inner, &cmd);
                                     return glib::Propagation::Stop;
                                 }
@@ -302,6 +304,16 @@ impl AppMenuWindow {
 
         let focus_guard = Rc::new(RefCell::new(FocusLossGuard::new()));
         install_popup_dismiss(&window, focus_guard.clone());
+
+        if !runner_mode {
+            let monitor = gio::AppInfoMonitor::get();
+            let inner_c = inner.clone();
+            monitor.connect_changed(move |_| {
+                *inner_c.apps.borrow_mut() = load_apps();
+                refresh_filter(&inner_c);
+            });
+        }
+
         refresh_filter(&inner);
 
         Self {
@@ -314,6 +326,9 @@ impl AppMenuWindow {
     pub fn present(&self) {
         present_popup(&self.window, &self.focus_guard);
         self.inner.search.set_text("");
+        if !self.inner.runner_mode {
+            *self.inner.apps.borrow_mut() = load_apps();
+        }
         refresh_filter(&self.inner);
         self.inner.search.grab_focus();
     }
@@ -437,7 +452,9 @@ fn refresh_filter(inner: &Rc<Inner>) {
                 "Run Command",
                 &cmd_for_label,
                 "utilities-terminal-symbolic",
-                Some(Rc::new(move || run_terminal_preview(&inner_c, &cmd_for_action))),
+                Some(Rc::new(move || {
+                    run_terminal_preview(&inner_c, &cmd_for_action)
+                })),
             );
             has = true;
         }
@@ -582,7 +599,10 @@ fn load_apps() -> Vec<AppEntry> {
             continue;
         }
         let name = info.display_name().to_string();
-        let desc = info.description().map(|s| s.to_string()).unwrap_or_default();
+        let desc = info
+            .description()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
         let search_text = format!("{name} {desc}").to_ascii_lowercase();
         apps.push(AppEntry {
             info,
@@ -591,7 +611,11 @@ fn load_apps() -> Vec<AppEntry> {
             search_text,
         });
     }
-    apps.sort_by(|a, b| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()));
+    apps.sort_by(|a, b| {
+        a.name
+            .to_ascii_lowercase()
+            .cmp(&b.name.to_ascii_lowercase())
+    });
     apps
 }
 
@@ -621,7 +645,9 @@ fn history_row(cmd: &str) -> gtk4::ListBoxRow {
     box_.set_margin_end(12);
     box_.set_margin_top(8);
     box_.set_margin_bottom(8);
-    box_.append(&gtk4::Image::from_icon_name("document-open-recent-symbolic"));
+    box_.append(&gtk4::Image::from_icon_name(
+        "document-open-recent-symbolic",
+    ));
     let label = gtk4::Label::new(Some(cmd));
     label.set_halign(gtk4::Align::Start);
     box_.append(&label);

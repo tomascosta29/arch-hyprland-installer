@@ -3,7 +3,9 @@ use crate::focus_guard::FocusLossGuard;
 use crate::popup::{install_popup_dismiss, present_popup};
 use crate::task::spawn_result;
 use adw::prelude::*;
-use costa_core::backends::cliphist::{fuzzy_match, looks_like_existing_path, ClipBackend, ClipEntry};
+use costa_core::backends::cliphist::{
+    fuzzy_match, looks_like_existing_path, ClipBackend, ClipEntry,
+};
 use costa_core::command;
 use gtk4::{gdk, glib};
 use std::cell::{Cell, RefCell};
@@ -282,9 +284,7 @@ impl ClipperWindow {
                 let text = buffer.text(&start, &end, true).to_string();
                 let path = expand_path(text.trim());
                 let open = if path.is_file() {
-                    path.parent()
-                        .map(PathBuf::from)
-                        .unwrap_or(path)
+                    path.parent().map(PathBuf::from).unwrap_or(path)
                 } else {
                     path
                 };

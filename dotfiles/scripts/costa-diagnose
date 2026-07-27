@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Read-only diagnostics for the managed desktop layer.
+
+set -u
+section() { printf '\n== %s ==\n' "$1"; }
+
+section "Session"
+printf 'Date: %s\n' "$(date --iso-8601=seconds)"
+printf 'Hyprland signature: %s\n' "${HYPRLAND_INSTANCE_SIGNATURE:-not set}"
+printf 'Theme: %s\n' "$(readlink "${XDG_CONFIG_HOME:-${HOME}/.config}/costa/current-theme" 2>/dev/null || printf 'not selected')"
+
+section "Hyprland configuration"
+hyprctl configerrors 2>&1 || true
+
+section "Managed user services"
+systemctl --user --no-pager --plain status \
+    hyprland-session.target costa-utils.service quickshell.service \
+    dunst.service hyprpaper.service monitor-reconcile.service 2>&1 || true
+
+section "Failed user services"
+systemctl --user --failed --no-pager --plain 2>&1 || true
+
+section "Costa Utils journal"
+journalctl --user -b -u costa-utils.service -n 100 --no-pager 2>&1 || true
+
+section "Quickshell journal"
+journalctl --user -b -u quickshell.service -n 100 --no-pager 2>&1 || true

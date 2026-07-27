@@ -134,7 +134,9 @@ hl.bind(
 hl.bind(main_mod .. " + ALT + T", hl.dsp.exec_cmd(scripts .. "/theme-select"))
 hl.bind(main_mod .. " + ALT + M", hl.dsp.exec_cmd(costa_utils .. " --monitor-menu"))
 hl.bind(main_mod .. " + ALT + K", hl.dsp.exec_cmd(scripts .. "/desktop-settings"))
+hl.bind(main_mod .. " + slash", hl.dsp.exec_cmd(costa_utils .. " --keybindings"))
 hl.bind(main_mod .. " + Print", hl.dsp.exec_cmd(costa_utils .. " --blinker-area"))
+hl.bind("Print", hl.dsp.exec_cmd(costa_utils .. " --blinker-window"))
 hl.bind(main_mod .. " + L", hl.dsp.exec_cmd("loginctl lock-session"))
 
 for key, direction in pairs({

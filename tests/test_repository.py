@@ -11,6 +11,21 @@ class InstallerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.installer = (REPOSITORY_ROOT / "install.sh").read_text()
+        packages = REPOSITORY_ROOT / "dotfiles" / "packages"
+        cls.common_packages = (packages / "common.txt").read_text()
+        cls.bare_packages = (packages / "profiles" / "bare-metal.txt").read_text()
+        cls.vm_packages = (packages / "profiles" / "vm.txt").read_text()
+        cls.full_packages = (packages / "flavors" / "full.txt").read_text()
+        cls.light_packages = (packages / "flavors" / "light.txt").read_text()
+        cls.all_package_policy = "\n".join(
+            (
+                cls.common_packages,
+                cls.bare_packages,
+                cls.vm_packages,
+                cls.full_packages,
+                cls.light_packages,
+            )
+        )
 
     def test_fstab_is_written_to_installed_system(self):
         self.assertIn("genfstab -U /mnt > /mnt/etc/fstab", self.installer)
@@ -33,6 +48,9 @@ class InstallerTests(unittest.TestCase):
             "hyprlock",
             "hypridle",
             "dunst",
+            "arch-audit",
+            "devtools",
+            "trivy",
             "hyprpaper",
             "hyprpolkitagent",
             "hyprshutdown",
@@ -45,7 +63,7 @@ class InstallerTests(unittest.TestCase):
             "sddm",
         }
         for package in expected:
-            self.assertRegex(self.installer, rf"\b{re.escape(package)}\b")
+            self.assertRegex(self.all_package_policy, rf"\b{re.escape(package)}\b")
 
         rejected = {
             "alacritty",
@@ -63,7 +81,7 @@ class InstallerTests(unittest.TestCase):
             "waybar",
         }
         for package in rejected:
-            self.assertNotRegex(self.installer, rf"\b{re.escape(package)}\b")
+            self.assertNotRegex(self.all_package_policy, rf"\b{re.escape(package)}\b")
 
     def test_installer_offers_keyboard_and_clock_settings(self):
         self.assertIn("KEYBOARD_LAYOUT", self.installer)
@@ -73,29 +91,11 @@ class InstallerTests(unittest.TestCase):
     def test_installer_offers_flavor_selection(self):
         self.assertIn('INSTALL_FLAVOR="full"', self.installer)
         self.assertIn("Installation flavor (full/light)", self.installer)
-        self.assertIn("FLAVOR_PACKAGES=(", self.installer)
+        self.assertIn("dotfiles/packages/flavors/full.txt", self.installer)
         self.assertIn("USER_SHELL=/usr/bin/zsh", self.installer)
         self.assertIn("USER_SHELL=/usr/bin/bash", self.installer)
 
     def test_light_flavor_omits_full_shell_tooling(self):
-        common = re.search(
-            r"COMMON_PACKAGES=\((.*?)\)\s+case \"\\?\$\{INSTALL_PROFILE\}\"",
-            self.installer,
-            flags=re.DOTALL,
-        )
-        full = re.search(
-            r"full\)\s+FLAVOR_PACKAGES=\((.*?)\)\s+;;",
-            self.installer,
-            flags=re.DOTALL,
-        )
-        light = re.search(
-            r"light\)\s+FLAVOR_PACKAGES=\((.*?)\)\s+;;",
-            self.installer,
-            flags=re.DOTALL,
-        )
-        self.assertIsNotNone(common)
-        self.assertIsNotNone(full)
-        self.assertIsNotNone(light)
         for package in (
             "zsh",
             "starship",
@@ -105,26 +105,39 @@ class InstallerTests(unittest.TestCase):
             "zsh-syntax-highlighting",
             "eza",
         ):
-            self.assertNotRegex(common.group(1), rf"\b{re.escape(package)}\b")
-            self.assertRegex(full.group(1), rf"\b{re.escape(package)}\b")
-            self.assertNotRegex(light.group(1), rf"\b{re.escape(package)}\b")
+            self.assertNotRegex(self.common_packages, rf"\b{re.escape(package)}\b")
+            self.assertRegex(self.full_packages, rf"\b{re.escape(package)}\b")
+            self.assertNotRegex(self.light_packages, rf"\b{re.escape(package)}\b")
 
         kitty = (REPOSITORY_ROOT / "dotfiles" / "kitty" / "kitty.conf").read_text()
         self.assertNotIn("shell /usr/bin/zsh", kitty)
         self.assertNotIn("Oh My Zsh", self.installer)
         self.assertNotIn("ohmyzsh", self.installer)
-        self.assertRegex(self.installer, r"LAZYVIM_STARTER_COMMIT=[0-9a-f]{40}")
+        self.assertIn('dotfiles/nvim"', self.installer)
+        self.assertNotIn("LazyVim/starter", self.installer)
         self.assertIn('"${USER_HOME}/.config/starship.toml"', self.installer)
         for build_package in ("base-devel", "rust", "pkgconf"):
+            if build_package != "base-devel":
+                self.assertNotRegex(self.common_packages, rf"\b{re.escape(build_package)}\b")
+        for removed_utility in ("bat",):
             self.assertNotRegex(
-                common.group(1),
-                rf"\b{re.escape(build_package)}\b",
-            )
-        for removed_utility in ("bat", "fastfetch"):
-            self.assertNotRegex(
-                common.group(1) + full.group(1),
+                self.common_packages + self.full_packages,
                 rf"\b{re.escape(removed_utility)}\b",
             )
+
+    def test_user_deployment_keeps_full_shell_configuration_current(self):
+        deploy_user = (REPOSITORY_ROOT / "scripts" / "deploy-user").read_text()
+        self.assertIn("'HOME\t.zshrc'", deploy_user)
+        self.assertIn("'CONFIG\tstarship.toml'", deploy_user)
+        self.assertIn(
+            '"${REPOSITORY_ROOT}/dotfiles/zshrc" "${HOME}/.zshrc"',
+            deploy_user,
+        )
+        self.assertIn(
+            '"${REPOSITORY_ROOT}/dotfiles/starship/starship.toml"',
+            deploy_user,
+        )
+        self.assertIn('HOME) root="${HOME}"', deploy_user)
 
     def test_installer_remains_interactive(self):
         self.assertNotIn("COSTA_INSTALL_NONINTERACTIVE", self.installer)
@@ -145,11 +158,11 @@ class InstallerTests(unittest.TestCase):
             "vulkan-tools",
             "libva-utils",
         ):
-            self.assertRegex(self.installer, rf"\b{re.escape(package)}\b")
+            self.assertRegex(self.all_package_policy, rf"\b{re.escape(package)}\b")
 
         for retired_package in ("libva-mesa-driver", "mesa-vdpau"):
             self.assertNotRegex(
-                self.installer,
+                self.all_package_policy,
                 rf"\b{re.escape(retired_package)}\b",
             )
 
@@ -167,28 +180,15 @@ class InstallerTests(unittest.TestCase):
             "noto-fonts-cjk",
             "dosfstools",
         ):
-            self.assertRegex(self.installer, rf"\b{re.escape(package)}\b")
+            self.assertRegex(self.common_packages, rf"\b{re.escape(package)}\b")
 
         for excluded_package in ("cups", "sane", "flatpak"):
             self.assertNotRegex(
-                self.installer,
+                self.all_package_policy,
                 rf"\b{re.escape(excluded_package)}\b",
             )
 
     def test_installation_profiles_separate_vm_and_bare_metal_packages(self):
-        bare_metal = re.search(
-            r"bare-metal\)\s+PROFILE_PACKAGES=\((.*?)\)\s+;;",
-            self.installer,
-            flags=re.DOTALL,
-        )
-        vm = re.search(
-            r"vm\)\s+PROFILE_PACKAGES=\((.*?)\)\s+;;",
-            self.installer,
-            flags=re.DOTALL,
-        )
-        self.assertIsNotNone(bare_metal)
-        self.assertIsNotNone(vm)
-
         for package in (
             "fwupd",
             "smartmontools",
@@ -198,20 +198,20 @@ class InstallerTests(unittest.TestCase):
             "bluez-utils",
             "brightnessctl",
         ):
-            self.assertRegex(bare_metal.group(1), rf"\b{re.escape(package)}\b")
-            self.assertNotRegex(vm.group(1), rf"\b{re.escape(package)}\b")
+            self.assertRegex(self.bare_packages, rf"\b{re.escape(package)}\b")
+            self.assertNotRegex(self.vm_packages, rf"\b{re.escape(package)}\b")
 
         for package in ("qemu-guest-agent", "spice-vdagent"):
-            self.assertRegex(vm.group(1), rf"\b{re.escape(package)}\b")
-            self.assertNotRegex(bare_metal.group(1), rf"\b{re.escape(package)}\b")
+            self.assertRegex(self.vm_packages, rf"\b{re.escape(package)}\b")
+            self.assertNotRegex(self.bare_packages, rf"\b{re.escape(package)}\b")
 
     def test_installer_configures_zram_without_disk_swap(self):
-        self.assertRegex(self.installer, r"\bzram-generator\b")
+        self.assertRegex(self.common_packages, r"\bzram-generator\b")
         self.assertIn("/etc/systemd/zram-generator.conf", self.installer)
         self.assertNotIn("mkswap", self.installer)
 
     def test_dual_disk_boot_and_keyring_integration_remain_enabled(self):
-        self.assertRegex(self.installer, r"\bos-prober\b")
+        self.assertRegex(self.common_packages, r"\bos-prober\b")
         self.assertIn("GRUB_DISABLE_OS_PROBER=false", self.installer)
         self.assertIn("pam_gnome_keyring", self.installer)
         self.assertIn("firewalld.service", self.installer)
@@ -238,6 +238,21 @@ class InstallerTests(unittest.TestCase):
         helper = (REPOSITORY_ROOT / "scripts" / "lib" / "costa-utils.sh").read_text()
         self.assertIn(r"BIN\tcosta-utils", helper)
         self.assertIn(r"BIN\tqs-activity", self.installer)
+
+    def test_installer_seeds_managed_firefox_and_neovim_configs(self):
+        self.assertIn('FIREFOX_PROFILE="costa.default-release"', self.installer)
+        self.assertIn("dotfiles/firefox-profile", self.installer)
+        self.assertIn("MANAGED_COMPONENTS+=(nvim)", self.installer)
+        self.assertTrue((REPOSITORY_ROOT / "dotfiles" / "nvim" / "init.lua").is_file())
+        self.assertTrue(
+            (
+                REPOSITORY_ROOT
+                / "dotfiles"
+                / "firefox-profile"
+                / "chrome"
+                / "userChrome.css"
+            ).is_file()
+        )
 
 
 class ThemeTests(unittest.TestCase):
@@ -635,6 +650,41 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("No active window geometry", source)
         self.assertNotIn('re.search(r"at:', source)
 
+    def test_print_bindings_capture_area_and_focused_window_directly(self):
+        hyprland = (REPOSITORY_ROOT / "dotfiles" / "hypr" / "hyprland.lua").read_text()
+        self.assertIn(
+            'main_mod .. " + Print", hl.dsp.exec_cmd(costa_utils .. " --blinker-area")',
+            hyprland,
+        )
+        self.assertIn(
+            '"Print", hl.dsp.exec_cmd(costa_utils .. " --blinker-window")',
+            hyprland,
+        )
+
+    def test_desktop_polish_helpers_remain_user_scoped(self):
+        scripts = REPOSITORY_ROOT / "dotfiles" / "scripts"
+        monitor = (scripts / "monitor-reconcile").read_text()
+        diagnose = (scripts / "costa-diagnose").read_text()
+        session = (
+            REPOSITORY_ROOT / "dotfiles/systemd/user/hyprland-session.target"
+        ).read_text()
+        self.assertIn("hyprctl keyword monitor", monitor)
+        self.assertNotIn("monitor-select", monitor)
+        self.assertIn("monitor-reconcile.service", session)
+        self.assertIn("journalctl --user", diagnose)
+        self.assertNotIn("sudo", diagnose)
+
+    def test_keybinding_guide_and_ocr_are_deployed(self):
+        bindings = json.loads(
+            (REPOSITORY_ROOT / "dotfiles/hypr/keybindings.json").read_text()
+        )
+        self.assertTrue(any(item["key"] == "Super + /" for item in bindings))
+        hyprland = (REPOSITORY_ROOT / "dotfiles/hypr/hyprland.lua").read_text()
+        self.assertIn("--keybindings", hyprland)
+        common = (REPOSITORY_ROOT / "dotfiles/packages/common.txt").read_text()
+        self.assertIn("tesseract\n", common)
+        self.assertIn("tesseract-data-eng\n", common)
+
     def test_screenshot_capture_plays_standard_shutter_sound(self):
         source = (
             REPOSITORY_ROOT
@@ -659,9 +709,11 @@ class ConfigurationTests(unittest.TestCase):
     def test_user_deployer_covers_every_config_component(self):
         deployer = (REPOSITORY_ROOT / "scripts" / "deploy-user").read_text()
         self.assertIn(
-            "CONFIG_COMPONENTS=(dunst hypr kitty quickshell rofi scripts systemd themes)",
+            "CONFIG_COMPONENTS=(dunst hypr kitty nvim packages paru quickshell rofi scripts systemd themes)",
             deployer,
         )
+        self.assertIn("deploy_firefox_profile", deployer)
+        self.assertIn("dotfiles/firefox-profile", deployer)
         self.assertIn("install_costa_utils", deployer)
         self.assertIn("scripts/lib/costa-utils.sh", deployer)
         self.assertIn("dotfiles/mimeapps.list", deployer)
@@ -783,6 +835,22 @@ class ConfigurationTests(unittest.TestCase):
         ).read_text()
         self.assertIn('std::env::set_var("GSK_RENDERER", "cairo")', launcher)
         self.assertIn('std::env::set_var("GSK_RENDERER", "gl")', launcher)
+
+    def test_package_audit_fails_closed_and_uses_native_security_tools(self):
+        source = REPOSITORY_ROOT / "costa-utils" / "crates" / "pkg-audit" / "src"
+        audit = (source / "audit.rs").read_text()
+        scanner = (source / "scanner.rs").read_text()
+        self.assertIn('"pacman", &["-Qqen"]', audit)
+        self.assertIn('"pacman", &["-Qqem"]', audit)
+        self.assertIn("difference(&expected)", audit)
+        self.assertIn("difference(&installed)", audit)
+        self.assertIn('"arch-audit"', scanner)
+        self.assertIn('"trivy"', scanner)
+        self.assertIn('"--format"', scanner)
+        self.assertIn('"json"', scanner)
+        self.assertNotIn("pkg:pacman", scanner)
+        installer = (REPOSITORY_ROOT / "scripts" / "lib" / "costa-utils.sh").read_text()
+        self.assertIn('"${bin_dir}/pkg-audit"', installer)
 
 
 if __name__ == "__main__":

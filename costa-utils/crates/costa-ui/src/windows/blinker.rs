@@ -47,8 +47,8 @@ impl BlinkerWindow {
         flow.set_halign(gtk4::Align::Center);
         flow.set_valign(gtk4::Align::Center);
         flow.set_selection_mode(gtk4::SelectionMode::None);
-        flow.set_max_children_per_line(3);
-        flow.set_min_children_per_line(3);
+        flow.set_max_children_per_line(2);
+        flow.set_min_children_per_line(2);
         flow.set_column_spacing(16);
         flow.set_row_spacing(16);
         flow.set_vexpand(true);
@@ -108,19 +108,36 @@ impl BlinkerWindow {
             let key_ctrl = gtk4::EventControllerKey::new();
             key_ctrl.connect_key_pressed(move |_, keyval, _, _| {
                 if keyval == key {
-                    capture(
-                        &window_key,
-                        &toast_key,
-                        &backend_key,
-                        &capturing_key,
-                        mode,
-                    );
+                    capture(&window_key, &toast_key, &backend_key, &capturing_key, mode);
                     return glib::Propagation::Stop;
                 }
                 glib::Propagation::Proceed
             });
             this_window.add_controller(key_ctrl);
         }
+
+        let ocr = make_capture_tile("Copy Text", "F4", "edit-copy-symbolic");
+        let ocr_window = window.clone();
+        let ocr_toast = toast.clone();
+        let ocr_backend = backend.clone();
+        let ocr_capturing = capturing.clone();
+        ocr.connect_clicked(move |_| {
+            capture_text(&ocr_window, &ocr_toast, &ocr_backend, &ocr_capturing);
+        });
+        flow.append(&ocr);
+        let ocr_window = window.clone();
+        let ocr_toast = toast.clone();
+        let ocr_backend = backend.clone();
+        let ocr_capturing = capturing.clone();
+        let ocr_key = gtk4::EventControllerKey::new();
+        ocr_key.connect_key_pressed(move |_, keyval, _, _| {
+            if keyval == gdk::Key::F4 {
+                capture_text(&ocr_window, &ocr_toast, &ocr_backend, &ocr_capturing);
+                return glib::Propagation::Stop;
+            }
+            glib::Propagation::Proceed
+        });
+        window.add_controller(ocr_key);
 
         let footer = gtk4::Box::new(gtk4::Orientation::Horizontal, 16);
         footer.set_halign(gtk4::Align::Center);
@@ -176,6 +193,45 @@ impl BlinkerWindow {
             CaptureMode::Area,
         );
     }
+
+    pub fn capture_window(&self) {
+        capture(
+            &self.window,
+            &self.toast,
+            &self.backend,
+            &self.capturing,
+            CaptureMode::Window,
+        );
+    }
+}
+
+fn capture_text(
+    window: &adw::ApplicationWindow,
+    toast: &adw::ToastOverlay,
+    backend: &BlinkerBackend,
+    capturing: &Rc<Cell<bool>>,
+) {
+    if capturing.get() {
+        return;
+    }
+    capturing.set(true);
+    window.set_visible(false);
+    let backend = backend.clone();
+    let success = toast.clone();
+    let failure = toast.clone();
+    let done = capturing.clone();
+    let failed = capturing.clone();
+    spawn_result(
+        move || backend.capture_text(),
+        move |_| {
+            done.set(false);
+            success.add_toast(adw::Toast::new("Copied recognized text"));
+        },
+        move |err| {
+            failed.set(false);
+            failure.add_toast(adw::Toast::new(&err.to_string()));
+        },
+    );
 }
 
 fn make_capture_tile(label: &str, shortcut: &str, icon_name: &str) -> gtk4::Button {

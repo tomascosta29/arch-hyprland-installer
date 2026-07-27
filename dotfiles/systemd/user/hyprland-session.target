@@ -12,5 +12,6 @@ Wants=quickshell.service
 Wants=cliphist-image.service
 Wants=cliphist-text.service
 Wants=costa-utils.service
+Wants=monitor-reconcile.service
 After=graphical-session-pre.target
 PropagatesStopTo=graphical-session.target
